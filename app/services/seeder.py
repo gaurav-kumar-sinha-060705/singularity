@@ -81,6 +81,7 @@ def seed(recompute_embeddings: bool = True, skip_if_nonempty: bool = False) -> d
             tool.permissions_needed_json = json.dumps(entry.get("permissions_needed", []))
             old_flags = set(tool.trust_flags)
             tool.trust_flags_json = json.dumps(flags)
+            db.flush()  # emit the fully-populated INSERT now so audit rows can never outrun it
 
             texts_to_embed.append((tool.id, f"{tool.name}. {tool.category}. {tool.description}"))
 

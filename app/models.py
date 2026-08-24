@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
@@ -84,6 +84,11 @@ class AuditLog(Base):
     event: Mapped[str] = mapped_column(String(50), index=True)
     detail_json: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+    # Declaring the relationship gives the unit of work an explicit dependency,
+    # so Tool INSERTs are always emitted before their AuditLog rows (Postgres
+    # enforces FK ordering; SQLite does not, which hid this for a long time).
+    tool = relationship("Tool")
 
 
 def log_event(db, event: str, tool_id: str | None = None, **detail) -> None:
