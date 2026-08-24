@@ -12,7 +12,7 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://<YOUR_RENDER_APP>.onrender.com/mcp"
+      "url": "https://compass-x86i.onrender.com/mcp"
     }
   ]
 }
