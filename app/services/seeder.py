@@ -1,11 +1,19 @@
-"""Index seeding — reusable from scripts and from app startup (seed-on-boot)."""
+"""Index seeding — reusable from scripts and from app startup (seed-on-boot).
+
+Two hardening guarantees for multi-instance/cloud deployments:
+1. Deterministic tool IDs: uuid5 derived from the slug, so every boot/deploy
+   generates identical IDs — audit-log foreign keys can never dangle.
+2. A Postgres advisory transaction lock serializes concurrent seeds, so two
+   instances booting simultaneously (e.g. during a Render deploy overlap)
+   cannot interleave writes against the same database.
+"""
 
 import json
 import uuid
 from pathlib import Path
 
 import numpy as np
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from app.database import SessionLocal, engine
 from app.models import Base, Tool, log_event
@@ -14,8 +22,16 @@ from app.services.scanner import scan_tool
 
 SEED_PATH = Path(__file__).resolve().parents[2] / "data" / "seed_tools.json"
 
+# Arbitrary but fixed bigint key for pg_advisory_xact_lock ('COMP' in hex).
+_SEED_ADVISORY_LOCK_KEY = 0x434F4D50
+
 COPY_FIELDS = ("name", "publisher", "publisher_verified", "category", "description",
                "mcp_available", "pricing_tier", "source")
+
+
+def _tool_id(slug: str) -> str:
+    """Stable ID: same slug always maps to the same UUID on every machine/boot."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"https://compass.gateway/tool/{slug}"))
 
 
 def _load_entries() -> list[dict]:
@@ -31,18 +47,30 @@ def tool_count() -> int:
         db.close()
 
 
-def seed(recompute_embeddings: bool = True) -> dict:
-    """Ingest seed_tools.json into the DB; returns {indexed, flagged}."""
+def seed(recompute_embeddings: bool = True, skip_if_nonempty: bool = False) -> dict:
+    """Ingest seed_tools.json into the DB; returns {indexed, flagged}.
+
+    skip_if_nonempty: when True (used by seed-on-boot), a non-empty tools table
+    short-circuits the seed — checked *inside* the advisory lock so concurrent
+    booting instances cannot double-seed.
+    """
     entries = _load_entries()
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
+        if engine.dialect.name == "postgresql":
+            db.execute(text("SELECT pg_advisory_xact_lock(:key)"),
+                       {"key": _SEED_ADVISORY_LOCK_KEY})
+        if skip_if_nonempty and tool_count() > 0:
+            rows = db.scalars(select(Tool)).all()
+            print(f"[compass] database already has {len(rows)} tools — skipping seed")
+            return {"indexed": len(rows), "flagged": sum(1 for t in rows if t.trust_flags)}
         texts_to_embed: list[tuple[str, str]] = []
         for entry in entries:
             flags = scan_tool(entry)
             tool = db.scalars(select(Tool).where(Tool.slug == entry["slug"])).first()
             if not tool:
-                tool = Tool(id=str(uuid.uuid4()), slug=entry["slug"])
+                tool = Tool(id=_tool_id(entry["slug"]), slug=entry["slug"])
                 db.add(tool)
             for field in COPY_FIELDS:
                 if field in entry:
@@ -84,12 +112,17 @@ def seed(recompute_embeddings: bool = True) -> dict:
 
 
 def seed_if_empty() -> bool:
-    """Seed only when the tools table is empty (first boot on a fresh database)."""
-    if tool_count() > 0:
+    """Seed only when the tools table is empty (first boot on a fresh database).
+
+    The emptiness check runs inside the advisory lock (skip_if_nonempty=True),
+    so a second instance booting while the first is mid-seed will wait, then
+    correctly skip instead of double-seeding.
+    """
+    result = seed(recompute_embeddings=True, skip_if_nonempty=True)
+    if tool_count() == 0:
         return False
-    summary = seed(recompute_embeddings=True)
-    print(f"[compass] fresh database detected — auto-seeded {summary['indexed']} tools "
-          f"({summary['flagged']} carry trust flags)")
+    print(f"[compass] seed state settled — {result['indexed']} tools "
+          f"({result['flagged']} carry trust flags)")
     return True
 
 
