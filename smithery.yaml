@@ -1,0 +1,22 @@
+# Smithery listing metadata for Compass.
+# After deploying, submit your GitHub repo URL at https://smithery.ai/new
+# or run: npx -y @smithery/cli publish
+name: compass-mcp-gateway
+displayName: Compass - MCP Discovery & Security Gateway
+description: >
+  Recommends the best-fit software platform or MCP tool for a user's problem,
+  scoring every candidate for tool-poisoning, prompt-injection, and permission
+  risk before an agent relies on it. Tools: find_solutions, get_trust_report,
+  compare_tools.
+keywords:
+  - mcp
+  - mcp-server
+  - security
+  - discovery
+  - trust-score
+  - prompt-injection
+  - tool-poisoning
+  - agent-safety
+remote:
+  type: streamable-http
+  url: https://<YOUR_RENDER_APP>.onrender.com/mcp

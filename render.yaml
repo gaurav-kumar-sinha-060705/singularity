@@ -1,0 +1,16 @@
+# Render Blueprint — deploy via "New +" → "Blueprint" after connecting this repo.
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: compass-gateway
+    runtime: docker
+    plan: free # switch to `starter` ($7/mo) for always-on — registries re-crawl weekly
+              # and strip verified badges from sleeping free instances
+    healthCheckPath: /health
+    envVars:
+      # Render injects RENDER_EXTERNAL_URL automatically; the MCP host allowlist
+      # picks it up at boot (see app/mcp_server.py).
+      - key: COMPASS_DATABASE_URL
+        sync: false # set in dashboard: postgresql+psycopg://postgres:PASS@db.<ref>.supabase.co:5432/postgres?sslmode=require
+      - key: COMPASS_RATE_LIMIT_PER_MIN
+        value: "60"
