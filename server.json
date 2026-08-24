@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.gaurav-kumar-sinha-060705/compass-mcp-gateway",
-  "description": "MCP Discovery & Security Gateway: finds the best-fit software platform or MCP-connectable tool for a user's problem and vets every candidate for tool-poisoning and prompt-injection risk before an agent relies on it. Exposes find_solutions, get_trust_report, and compare_tools.",
+  "description": "Find best-fit tools for any problem, vetted for prompt-injection risk before your agent trusts them",
   "title": "Compass - MCP Discovery & Security Gateway",
   "websiteUrl": "https://github.com/gaurav-kumar-sinha-060705/Compass",
   "repository": {
