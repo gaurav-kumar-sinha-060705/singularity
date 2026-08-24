@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ["COMPASS_DATABASE_URL"] = "sqlite:///./data/verify.db"
-os.environ["RENDER_EXTERNAL_URL"] = "https://compass-gateway-fake.onrender.com"
+os.environ["RENDER_EXTERNAL_URL"] = "https://compass-fake.onrender.com"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
@@ -27,7 +27,7 @@ with TestClient(app) as client:
     # 1) Public Render hostname must pass the DNS-rebinding guard
     ok = client.post(
         "/mcp", json=INITIALIZE,
-        headers={"Host": "compass-gateway-fake.onrender.com",
+        headers={"Host": "compass-fake.onrender.com",
                  "Accept": "application/json, text/event-stream"},
     )
     assert ok.status_code == 200, f"public host rejected: {ok.status_code} {ok.text[:200]}"

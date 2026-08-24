@@ -2,7 +2,7 @@
 # Docs: https://render.com/docs/blueprint-spec
 services:
   - type: web
-    name: compass-gateway
+    name: compass
     runtime: docker
     plan: free # switch to `starter` ($7/mo) for always-on — registries re-crawl weekly
               # and strip verified badges from sleeping free instances

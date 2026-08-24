@@ -39,12 +39,12 @@ git push -u origin main
 3. Render reads `render.yaml`. When prompted for `COMPASS_DATABASE_URL`,
    paste the modified Supabase string from step 2
 4. Click **Apply / Create** — build takes a few minutes (installs deps + bakes the embedding model)
-5. Note your service URL, e.g. `https://compass-gateway-xxxx.onrender.com`
+5. Note your service URL, e.g. `https://compass-xxxx.onrender.com`
 
 ## Step 4 — Verify the deployment
 
 ```powershell
-$u = "https://compass-gateway-xxxx.onrender.com"
+$u = "https://compass-xxxx.onrender.com"
 Invoke-RestMethod "$u/health"                                   # expect status ok, indexed_tools 15
 powershell -ExecutionPolicy Bypass -File scripts\smoke_mcp.ps1 -BaseUrl $u
 ```
@@ -53,7 +53,7 @@ The smoke script runs a full MCP handshake against the public URL. If it passes,
 connect your editor:
 
 ```json
-{ "servers": { "compass": { "type": "http", "url": "https://compass-gateway-xxxx.onrender.com/mcp" } } }
+{ "servers": { "compass": { "type": "http", "url": "https://compass-xxxx.onrender.com/mcp" } } }
 ```
 
 ## Step 5 — Publish to registries
