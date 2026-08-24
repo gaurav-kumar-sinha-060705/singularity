@@ -3,6 +3,7 @@
 # or run: npx -y @smithery/cli publish
 name: compass-mcp-gateway
 displayName: Compass - MCP Discovery & Security Gateway
+homepage: https://github.com/gaurav-kumar-sinha-060705/Compass
 description: >
   Recommends the best-fit software platform or MCP tool for a user's problem,
   scoring every candidate for tool-poisoning, prompt-injection, and permission
