@@ -98,7 +98,8 @@ def find_solutions(
     db = SessionLocal()
     try:
         log_event(db, "recommendation_served", channel="mcp", problem=problem,
-                  returned=[tool.slug for tool, *_ in ranked])
+                  returned=[tool.slug for tool, *_ in ranked],
+                  top_rank=ranked[0][2] if ranked else None)
         db.commit()
     finally:
         db.close()
