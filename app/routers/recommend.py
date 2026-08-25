@@ -1,13 +1,10 @@
-import json
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.database import get_db
 from app.models import Tool, hash_ip, log_event
-from app.schemas import FeedbackRequest, RecommendRequest, RecommendResponse, RecommendationItem
+from app.schemas import RecommendRequest, RecommendResponse, RecommendationItem
 from app.services.discovery_engine import parse_intent
 from app.services.embeddings import embed_query
 from app.services.ranking import rank_candidates
@@ -28,7 +25,6 @@ def _extract_audit_context(request: Request) -> dict:
 
 @router.post("/recommend", response_model=RecommendResponse)
 def recommend(payload: RecommendRequest, request: Request, db: Session = Depends(get_db)):
-    settings = get_settings()
     intent = parse_intent(payload.problem)
     audit = _extract_audit_context(request)
 
@@ -91,18 +87,6 @@ def recommend(payload: RecommendRequest, request: Request, db: Session = Depends
     db.commit()
 
     return RecommendResponse(query=payload.problem, intent=intent, recommendations=recommendations)
-
-
-@router.post("/feedback")
-def feedback(payload: FeedbackRequest, request: Request, db: Session = Depends(get_db)):
-    audit = _extract_audit_context(request)
-    log_event(
-        db, "recommendation_feedback",
-        **audit, problem=payload.problem,
-        slug=payload.slug, rating=payload.rating,
-    )
-    db.commit()
-    return {"status": "ok"}
 
 
 @router.get("/tools/{slug}")

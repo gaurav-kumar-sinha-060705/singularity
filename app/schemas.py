@@ -42,28 +42,3 @@ class RecommendResponse(BaseModel):
     intent: IntentOut
     recommendations: list[RecommendationItem]
     message: str | None = None
-
-
-class FeedbackRequest(BaseModel):
-    problem: str = Field(min_length=1, max_length=1000)
-    slug: str
-    rating: Literal["up", "down"]
-
-
-class ToolOut(BaseModel):
-    slug: str
-    name: str
-    publisher: str
-    publisher_verified: bool
-    category: str
-    description: str
-    mcp_available: bool
-    pricing_tier: str
-    integrations: list[Any]
-    permissions_requested: list[Any]
-    permissions_needed: list[Any]
-    trust_score: float
-    trust_flags: list[Any]
-    source: str
-    created_at: str
-    updated_at: str
