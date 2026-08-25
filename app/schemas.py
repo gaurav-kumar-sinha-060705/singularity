@@ -44,6 +44,12 @@ class RecommendResponse(BaseModel):
     message: str | None = None
 
 
+class FeedbackRequest(BaseModel):
+    problem: str = Field(min_length=1, max_length=1000)
+    slug: str
+    rating: Literal["up", "down"]
+
+
 class ToolOut(BaseModel):
     slug: str
     name: str

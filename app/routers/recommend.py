@@ -1,13 +1,13 @@
 import json
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
-from app.models import Tool, log_event
-from app.schemas import RecommendRequest, RecommendResponse, RecommendationItem
+from app.models import Tool, hash_ip, log_event
+from app.schemas import FeedbackRequest, RecommendRequest, RecommendResponse, RecommendationItem
 from app.services.discovery_engine import parse_intent
 from app.services.embeddings import embed_query
 from app.services.ranking import rank_candidates
@@ -16,10 +16,21 @@ from app.services.recommendation_index import index
 router = APIRouter()
 
 
+def _extract_audit_context(request: Request) -> dict:
+    channel = request.headers.get("x-test-source", "rest")
+    raw_ip = (
+        request.headers.get("x-forwarded-for", "")
+        or (request.client.host if request.client else "unknown")
+    )
+    ip = raw_ip.split(",")[0].strip() or "unknown"
+    return {"channel": channel, "ip_hash": hash_ip(ip)}
+
+
 @router.post("/recommend", response_model=RecommendResponse)
-def recommend(payload: RecommendRequest, db: Session = Depends(get_db)):
+def recommend(payload: RecommendRequest, request: Request, db: Session = Depends(get_db)):
     settings = get_settings()
     intent = parse_intent(payload.problem)
+    audit = _extract_audit_context(request)
 
     query_embedding = embed_query(payload.problem)
     hits = index.search(
@@ -36,6 +47,11 @@ def recommend(payload: RecommendRequest, db: Session = Depends(get_db)):
 
     if not scored:
         intent_line = f"Detected intent: {intent['category_hint'] or 'general'}"
+        log_event(
+            db, "recommendation_served",
+            **audit, problem=payload.problem, returned=[], top_rank=None,
+        )
+        db.commit()
         return RecommendResponse(
             query=payload.problem,
             intent=intent,
@@ -67,15 +83,26 @@ def recommend(payload: RecommendRequest, db: Session = Depends(get_db)):
     ]
 
     log_event(
-        db,
-        "recommendation_served",
-        problem=payload.problem,
+        db, "recommendation_served",
+        **audit, problem=payload.problem,
         returned=[r.slug for r in recommendations],
         top_rank=recommendations[0].rank_score if recommendations else None,
     )
     db.commit()
 
     return RecommendResponse(query=payload.problem, intent=intent, recommendations=recommendations)
+
+
+@router.post("/feedback")
+def feedback(payload: FeedbackRequest, request: Request, db: Session = Depends(get_db)):
+    audit = _extract_audit_context(request)
+    log_event(
+        db, "recommendation_feedback",
+        **audit, problem=payload.problem,
+        slug=payload.slug, rating=payload.rating,
+    )
+    db.commit()
+    return {"status": "ok"}
 
 
 @router.get("/tools/{slug}")

@@ -1,4 +1,6 @@
+import hashlib
 import json
+import os
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text
@@ -6,9 +8,17 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
+_IP_SALT = os.environ.get("COMPASS_IP_SALT", "compass-default-salt")
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def hash_ip(ip: str | None) -> str | None:
+    if not ip or ip == "unknown":
+        return None
+    return hashlib.sha256(f"{_IP_SALT}:{ip}".encode()).hexdigest()[:16]
 
 
 def _loads(value: str | None) -> list:
