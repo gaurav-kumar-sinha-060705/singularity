@@ -64,11 +64,12 @@ def rank_candidates(candidates: list[tuple[object, float]], category_hint: str |
     if not candidates:
         return []
     settings = get_settings()
+    raw_threshold = settings.general_intent_threshold if category_hint is None else settings.min_fit_threshold
     raw_fits = [fit for _, fit in candidates]
     boosted = apply_category_priors(raw_fits, [t.category for t, _ in candidates], category_hint)
 
     paired = [(c, b) for c, b in zip(candidates, boosted)
-              if b >= settings.min_fit_threshold]
+              if b >= raw_threshold]
     if not paired:
         return []
     candidates, boosted = zip(*paired)

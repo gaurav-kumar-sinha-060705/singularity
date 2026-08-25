@@ -23,6 +23,12 @@ def test_find_solutions_no_match_returns_honest_fallback():
     assert "Phase 1" in out
 
 
+def test_find_solutions_wedding_returns_no_match():
+    out = find_solutions("help me plan a wedding seating chart")
+    assert "No strong matches" in out
+    assert "fit 1.0" not in out
+
+
 def test_get_trust_report_shows_overreach():
     out = get_trust_report("github-mcp")
     assert "permission_overreach" in out

@@ -86,3 +86,27 @@ def test_recommend_expenses_filters_low_fit_tools(client):
     slugs = [r["slug"] for r in resp.json()["recommendations"]]
     assert "slack-mcp" not in slugs
     assert "sentry-mcp" not in slugs
+
+
+def test_off_topic_wedding_returns_no_match(client):
+    resp = client.post("/api/v1/recommend", json={
+        "problem": "help me plan a wedding seating chart",
+        "top_k": 5,
+    })
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["recommendations"] == []
+    assert body["message"] is not None
+    assert body["intent"]["category_hint"] is None
+
+
+def test_off_topic_freelance_contracts_returns_no_match(client):
+    resp = client.post("/api/v1/recommend", json={
+        "problem": "draft freelance contracts for my design clients",
+        "top_k": 5,
+    })
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["recommendations"] == []
+    assert body["message"] is not None
+    assert body["intent"]["category_hint"] is None
