@@ -75,6 +75,12 @@ def rank_candidates(candidates: list[tuple[object, float]], category_hint: str |
 
     normalized = normalize_scores(list(boosted))
 
+    paired = [(c, n) for c, n in zip(candidates, normalized)
+              if n >= settings.min_fit_threshold]
+    if not paired:
+        return []
+    candidates, normalized = zip(*paired)
+
     scored = []
     for (tool, _), fit_score, rank_score in (
         (cand, *combine_scores(norm, cand[0].trust_score, len(cand[0].trust_flags)))

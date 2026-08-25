@@ -24,7 +24,7 @@ def test_tools_detail(client):
     assert "permission_overreach" in body["trust_flags"]
 
 
-def test_recommend_expenses_ranks_finance_first_and_buries_poisoned_tool(client):
+def test_recommend_expenses_ranks_finance_first(client):
     resp = client.post("/api/v1/recommend", json={
         "problem": "I need to track my team's expenses and submit receipts",
         "top_k": 5,
@@ -33,13 +33,11 @@ def test_recommend_expenses_ranks_finance_first_and_buries_poisoned_tool(client)
     body = resp.json()
     assert body["intent"]["category_hint"] == "finance"
     recs = body["recommendations"]
-    assert len(recs) >= 2
-    top_categories = [r["category"] for r in recs]
-    assert top_categories.count("finance") >= 2
-    poisoned = next((r for r in recs if r["slug"] == "quickledger-pro"), None)
-    if poisoned:
-        assert recs.index(poisoned) >= 1
-        assert "suspicious_description_imperative" in poisoned["trust_flags"]
+    assert len(recs) >= 1
+    assert recs[0]["category"] == "finance"
+    slugs = [r["slug"] for r in recs]
+    assert "quickledger-pro" not in slugs
+    assert "slack-mcp" not in slugs
     for r in recs:
         assert 0.0 <= r["fit_score"] <= 1.0
         assert 0.0 <= r["rank_score"] <= 1.0

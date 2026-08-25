@@ -38,6 +38,8 @@ class RecommendationIndex:
                 continue
             if max_pricing_tier and PRICING_ORDER.get(tool.pricing_tier, 99) > PRICING_ORDER[max_pricing_tier]:
                 continue
+            if tool.trust_score < 0.2:
+                continue
             candidates.append(i)
 
         results: list[tuple[Tool, float]] = []

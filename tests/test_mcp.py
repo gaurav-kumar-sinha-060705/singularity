@@ -8,16 +8,12 @@ def test_find_solutions_ranks_finance_first():
     assert "expensify-mcp" in out
     assert "trust" in out.lower()
     assert "Compass advises only" in out
-    # poisoned tool must not outrank the clean finance tools
-    if "quickledger-pro" in out:
-        assert out.index("expensify-mcp") < out.index("quickledger-pro")
+    assert "quickledger-pro" not in out
 
 
-def test_find_solutions_flags_are_explained():
+def test_find_solutions_excludes_dangerously_low_trust():
     out = find_solutions("track expenses", top_k=10)
-    if "quickledger-pro" in out:
-        assert "suspicious_description_imperative" in out
-        assert "aimed at an AI agent" in out
+    assert "quickledger-pro" not in out
 
 
 def test_find_solutions_no_match_returns_honest_fallback():
