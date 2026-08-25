@@ -63,9 +63,17 @@ def rank_candidates(candidates: list[tuple[object, float]], category_hint: str |
     """candidates: [(Tool, raw_cosine_fit)] → sorted [(Tool, fit_score, rank_score, rationale)]."""
     if not candidates:
         return []
+    settings = get_settings()
     raw_fits = [fit for _, fit in candidates]
     boosted = apply_category_priors(raw_fits, [t.category for t, _ in candidates], category_hint)
-    normalized = normalize_scores(boosted)
+
+    paired = [(c, b) for c, b in zip(candidates, boosted)
+              if b >= settings.min_fit_threshold]
+    if not paired:
+        return []
+    candidates, boosted = zip(*paired)
+
+    normalized = normalize_scores(list(boosted))
 
     scored = []
     for (tool, _), fit_score, rank_score in (

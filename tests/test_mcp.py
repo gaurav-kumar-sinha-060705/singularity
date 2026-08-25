@@ -20,6 +20,13 @@ def test_find_solutions_flags_are_explained():
         assert "aimed at an AI agent" in out
 
 
+def test_find_solutions_no_match_returns_honest_fallback():
+    out = find_solutions("auto-generate video captions for my YouTube channel")
+    assert "No strong matches" in out
+    assert "fit 1.0" not in out
+    assert "Phase 1" in out
+
+
 def test_get_trust_report_shows_overreach():
     out = get_trust_report("github-mcp")
     assert "permission_overreach" in out

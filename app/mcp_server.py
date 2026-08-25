@@ -97,6 +97,14 @@ def find_solutions(
 
     ranked = rank_candidates(hits, intent["category_hint"])[:top_k]
 
+    if not ranked:
+        intent_line = f"Detected intent: {intent['category_hint'] or 'general'}"
+        return (
+            f"No strong matches found.\n{intent_line}\n\n"
+            "The tool index is currently limited (Phase 1). "
+            "Try broadening your query or check back as more tools are indexed."
+        )
+
     db = SessionLocal()
     try:
         log_event(db, "recommendation_served", channel="mcp", problem=problem,

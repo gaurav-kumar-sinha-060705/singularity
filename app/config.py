@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     trust_weight: float = 0.35
     flag_penalty: float = 0.07
     default_top_k: int = 5
+    min_fit_threshold: float = 0.57
 
     # MCP endpoint security: hosts allowed to call /mcp (DNS-rebinding guard).
     mcp_allowed_hosts: str = "localhost:*,127.0.0.1:*,[::1]:*,testserver"

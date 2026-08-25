@@ -41,6 +41,7 @@ class RecommendResponse(BaseModel):
     query: str
     intent: IntentOut
     recommendations: list[RecommendationItem]
+    message: str | None = None
 
 
 class ToolOut(BaseModel):

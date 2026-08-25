@@ -34,6 +34,19 @@ def recommend(payload: RecommendRequest, db: Session = Depends(get_db)):
     # then blended with trust minus per-flag penalties — see ROADMAP.md §4.3.
     scored = rank_candidates(hits, intent["category_hint"])
 
+    if not scored:
+        intent_line = f"Detected intent: {intent['category_hint'] or 'general'}"
+        return RecommendResponse(
+            query=payload.problem,
+            intent=intent,
+            recommendations=[],
+            message=(
+                f"No strong match found for this query. {intent_line}. "
+                "The tool index is currently limited (Phase 1) — try broadening "
+                "your query or check back as more tools are indexed."
+            ),
+        )
+
     recommendations = [
         RecommendationItem(
             slug=tool.slug,
