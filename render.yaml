@@ -13,4 +13,4 @@ services:
       - key: COMPASS_DATABASE_URL
         sync: false # set in dashboard: postgresql+psycopg://postgres:PASS@db.<ref>.supabase.co:5432/postgres?sslmode=require
       - key: COMPASS_RATE_LIMIT_PER_MIN
-        value: "60"
+        value: "300"

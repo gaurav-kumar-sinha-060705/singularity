@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     mcp_allowed_hosts: str = "localhost:*,127.0.0.1:*,[::1]:*,testserver"
 
     # HTTP protection
-    rate_limit_per_min: int = 60
+    rate_limit_per_min: int = 300
 
 
 @lru_cache
