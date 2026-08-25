@@ -92,18 +92,8 @@ def find_solutions(
     query_embedding = embed_query(problem)
     hits = index.search(query_embedding, max_pricing_tier=max_pricing_tier,
                         require_mcp=True, limit=top_k * 3)
-    if not hits:
-        return "No matching tools are indexed yet."
 
-    ranked = rank_candidates(hits, intent["category_hint"])[:top_k]
-
-    if not ranked:
-        intent_line = f"Detected intent: {intent['category_hint'] or 'general'}"
-        return (
-            f"No strong matches found.\n{intent_line}\n\n"
-            "The tool index is currently limited (Phase 1). "
-            "Try broadening your query or check back as more tools are indexed."
-        )
+    ranked = rank_candidates(hits, intent["category_hint"])[:top_k] if hits else []
 
     db = SessionLocal()
     try:
@@ -112,6 +102,14 @@ def find_solutions(
         db.commit()
     finally:
         db.close()
+
+    if not ranked:
+        intent_line = f"Detected intent: {intent['category_hint'] or 'general'}"
+        return (
+            f"No strong matches found.\n{intent_line}\n\n"
+            "The tool index is currently limited (Phase 1). "
+            "Try broadening your query or check back as more tools are indexed."
+        )
 
     intent_line = f"Detected intent: {intent['category_hint'] or 'general'}"
     if intent["matched_keywords"]:
