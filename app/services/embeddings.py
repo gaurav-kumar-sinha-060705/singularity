@@ -1,3 +1,4 @@
+import functools
 import threading
 
 import numpy as np
@@ -6,6 +7,7 @@ from app.config import get_settings
 
 _lock = threading.Lock()
 _model = None
+_embed_semaphore = threading.Semaphore(2)
 
 BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 
@@ -27,7 +29,9 @@ def embed_texts(texts: list[str]) -> np.ndarray:
     return vectors / norms
 
 
+@functools.lru_cache(maxsize=256)
 def embed_query(query: str) -> np.ndarray:
-    settings = get_settings()
-    text = f"{BGE_QUERY_PREFIX}{query}" if "bge" in settings.embedding_model.lower() else query
-    return embed_texts([text])[0]
+    with _embed_semaphore:
+        settings = get_settings()
+        text = f"{BGE_QUERY_PREFIX}{query}" if "bge" in settings.embedding_model.lower() else query
+        return embed_texts([text])[0]

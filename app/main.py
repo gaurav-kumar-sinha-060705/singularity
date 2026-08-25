@@ -8,6 +8,7 @@ from app.database import Base, SessionLocal, engine
 from app.mcp_server import build_mcp_asgi_app
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.routers import recommend
+from app.services.embeddings import get_model
 from app.services.recommendation_index import index
 from app.services.seeder import seed_if_empty
 
@@ -21,6 +22,7 @@ async def lifespan(app: FastAPI):
         count = index.load(db)
     finally:
         db.close()
+    get_model()
     async with AsyncExitStack() as stack:
         mcp_app = app.state.mcp_asgi_app
         await stack.enter_async_context(mcp_app.router.lifespan_context(mcp_app))
