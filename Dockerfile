@@ -10,11 +10,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # App code first (embeddings module needs the package), then bake the
 # embedding model into the image so cold starts skip the ~35MB download.
-COPY singularity ./singularity
+COPY app ./singularity
 RUN python -c "from singularity.services.embeddings import embed_texts; embed_texts(['warmup'])"
 
 COPY scripts ./scripts
 COPY data ./data
 
 EXPOSE 10000
-CMD ["sh", "-c", "uvicorn singularity.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

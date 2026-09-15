@@ -1,6 +1,6 @@
 import json
 
-from singularity.mcp_server import compare_tools, find_solutions, get_trust_report
+from app.mcp_server import compare_tools, find_solutions, get_trust_report
 
 
 def test_find_solutions_ranks_finance_first():

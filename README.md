@@ -12,7 +12,7 @@ See [ROADMAP.md](ROADMAP.md) for the full plan. Blueprint: `../Singularity_Bluep
 pip install -r requirements.txt
 copy .env.example .env          # optional, defaults are fine (SQLite)
 python scripts/seed_index.py    # builds index + embeddings (first run downloads ~35MB model)
-python -m uvicorn singularity.main:app --reload   # http://127.0.0.1:8000/docs
+python -m uvicorn app.main:app --reload   # http://127.0.0.1:8000/docs
 ```
 
 A fresh boot with an empty database auto-seeds itself — `seed_index.py` is only needed

@@ -16,12 +16,12 @@ from pydantic import Field
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 
-from singularity.database import SessionLocal
-from singularity.models import Tool, log_event
-from singularity.services.discovery_engine import parse_intent
-from singularity.services.embeddings import embed_query
-from singularity.services.ranking import FLAG_EXPLANATIONS, rank_candidates
-from singularity.services.recommendation_index import PRICING_ORDER, index
+from app.database import SessionLocal
+from app.models import Tool, log_event
+from app.services.discovery_engine import parse_intent
+from app.services.embeddings import embed_query
+from app.services.ranking import FLAG_EXPLANATIONS, rank_candidates
+from app.services.recommendation_index import PRICING_ORDER, index
 
 mcp = MCPServer(
     name="singularity",
@@ -214,7 +214,7 @@ def _configured_allowed_hosts() -> list[str]:
     """Hosts allowed by config plus, on Render, the injected external URL's host."""
     from urllib.parse import urlparse
 
-    from singularity.config import get_settings, parse_allowed_hosts
+    from app.config import get_settings, parse_allowed_hosts
 
     hosts = parse_allowed_hosts(get_settings().mcp_allowed_hosts)
     external_url = os.environ.get("RENDER_EXTERNAL_URL", "").strip()

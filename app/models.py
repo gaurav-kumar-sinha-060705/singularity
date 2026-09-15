@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from singularity.database import Base
+from app.database import Base
 
 _IP_SALT = os.environ.get("SINGULARITY_IP_SALT", "singularity-default-salt")
 

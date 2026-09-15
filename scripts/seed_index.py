@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from singularity.services.seeder import seed  # noqa: E402
+from app.services.seeder import seed  # noqa: E402
 
 
 if __name__ == "__main__":
@@ -16,8 +16,8 @@ if __name__ == "__main__":
     result = seed(recompute_embeddings=not args.no_embeddings)
     print(f"Indexed {result['indexed']} tools ({result['flagged']} flagged):")
     from sqlalchemy import select  # noqa: E402
-    from singularity.database import SessionLocal  # noqa: E402
-    from singularity.models import Tool  # noqa: E402
+    from app.database import SessionLocal  # noqa: E402
+    from app.models import Tool  # noqa: E402
 
     db = SessionLocal()
     try:

@@ -10,7 +10,7 @@ os.environ["RENDER_EXTERNAL_URL"] = "https://singularity-fake.onrender.com"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from singularity.main import app  # noqa: E402
+from app.main import app  # noqa: E402
 
 INITIALIZE = {
     "jsonrpc": "2.0",

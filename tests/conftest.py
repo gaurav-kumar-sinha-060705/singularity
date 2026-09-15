@@ -9,15 +9,15 @@ os.environ["SINGULARITY_DATABASE_URL"] = "sqlite:///./data/test.db"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from singularity.main import app  # noqa: E402
+from app.main import app  # noqa: E402
 from scripts.seed_index import seed  # noqa: E402
 
 
 @pytest.fixture(scope="session", autouse=True)
 def seeded_index():
     seed(recompute_embeddings=True)
-    from singularity.database import SessionLocal
-    from singularity.services.recommendation_index import index
+    from app.database import SessionLocal
+    from app.services.recommendation_index import index
 
     db = SessionLocal()
     try:

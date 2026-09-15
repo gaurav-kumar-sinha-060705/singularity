@@ -3,14 +3,14 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from singularity.config import get_settings
-from singularity.database import Base, SessionLocal, engine
-from singularity.mcp_server import build_mcp_asgi_app
-from singularity.middleware.rate_limit import RateLimitMiddleware
-from singularity.routers import recommend
-from singularity.services.embeddings import get_model
-from singularity.services.recommendation_index import index
-from singularity.services.seeder import seed_if_empty
+from app.config import get_settings
+from app.database import Base, SessionLocal, engine
+from app.mcp_server import build_mcp_asgi_app
+from app.middleware.rate_limit import RateLimitMiddleware
+from app.routers import recommend
+from app.services.embeddings import get_model
+from app.services.recommendation_index import index
+from app.services.seeder import seed_if_empty
 
 
 @asynccontextmanager

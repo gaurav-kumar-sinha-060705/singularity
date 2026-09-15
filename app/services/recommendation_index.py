@@ -2,7 +2,7 @@ import numpy as np
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from singularity.models import Tool
+from app.models import Tool
 
 PRICING_ORDER = {"free": 0, "freemium": 1, "paid": 2, "enterprise": 3}
 

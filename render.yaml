@@ -9,7 +9,7 @@ services:
     healthCheckPath: /health
     envVars:
       # Render injects RENDER_EXTERNAL_URL automatically; the MCP host allowlist
-      # picks it up at boot (see singularity/mcp_server.py).
+      # picks it up at boot (see app/mcp_server.py).
       - key: SINGULARITY_DATABASE_URL
         sync: false # set in dashboard: postgresql+psycopg://postgres:PASS@db.<ref>.supabase.co:5432/postgres?sslmode=require
       - key: SINGULARITY_RATE_LIMIT_PER_MIN

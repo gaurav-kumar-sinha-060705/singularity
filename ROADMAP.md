@@ -55,7 +55,7 @@
 Curated index, semantic search, calibrated confidence floor, trust scoring, audit
 logging. Deployed as a native MCP server; listed on official MCP Registry, Glama, Smithery.
 
-- ✅ `pip install -r requirements.txt && python scripts/seed_index.py && uvicorn singularity.main:app`
+- ✅ `pip install -r requirements.txt && python scripts/seed_index.py && uvicorn app.main:app`
 - ✅ Poisoned sample tool (`quickledger-pro`) auto-flagged at ingest, excluded from top-3
 - ✅ Native MCP server at `/mcp` (streamable HTTP, DNS-rebinding protected)
 - ✅ pytest green
