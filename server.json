@@ -12,7 +12,7 @@
     "remotes": [
       {
         "type": "streamable-http",
-        "url": "https://singularity-6q6c.onrender.com/mcp"
+        "url": "https://singularity-osd2.onrender.com/mcp"
       }
     ]
 }
