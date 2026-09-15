@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # App code first (embeddings module needs the package), then bake the
 # embedding model into the image so cold starts skip the ~35MB download.
 COPY app ./app
-RUN python -c "from app.services.embeddings import embed_texts; embed_texts(['warmup']); from app.services.discovery_engine import DiscoveryEngine; DiscoveryEngine.preload_rules()"
+RUN python -c "from app.services.embeddings import embed_texts; embed_texts(['warmup'])"
 
 COPY scripts ./scripts
 COPY data ./data
