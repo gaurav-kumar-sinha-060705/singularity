@@ -2,6 +2,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
@@ -48,6 +49,13 @@ def create_app() -> FastAPI:
     @app.get("/health")
     def health():
         return {"status": "ok", "indexed_tools": index.size}
+
+    @app.get("/.well-known/glama.json")
+    def glama_claim():
+        return JSONResponse({
+            "$schema": "https://glama.ai/mcp/schemas/connector.json",
+            "claim": get_settings().glama_claim,
+        })
 
     # Native MCP endpoint (streamable HTTP, stateless): http://host:port/mcp
     # Mounted LAST so explicit routes above always win.

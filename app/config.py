@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # HTTP protection
     rate_limit_per_min: int = 300
 
+    # Glama ownership verification token (served at /.well-known/glama.json).
+    glama_claim: str = "glama_claim_u7S6w2_iR_kGDr86GYa0az7UVK2nKuUy"
+
 
 @lru_cache
 def get_settings() -> Settings:

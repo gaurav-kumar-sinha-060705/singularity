@@ -6,6 +6,14 @@ def test_health(client):
     assert body["indexed_tools"] >= 15
 
 
+def test_glama_claim_well_known(client):
+    resp = client.get("/.well-known/glama.json")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["$schema"] == "https://glama.ai/mcp/schemas/connector.json"
+    assert body["claim"] == "glama_claim_u7S6w2_iR_kGDr86GYa0az7UVK2nKuUy"
+
+
 def test_tools_list(client):
     resp = client.get("/api/v1/tools")
     assert resp.status_code == 200
