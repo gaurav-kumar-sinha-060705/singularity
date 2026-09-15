@@ -1,18 +1,18 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.gaurav-kumar-sinha-060705/compass-mcp-gateway",
-  "description": "Find best-fit tools for any problem, vetted for prompt-injection risk before your agent trusts them",
-  "title": "Compass - MCP Discovery & Security Gateway",
-  "websiteUrl": "https://github.com/gaurav-kumar-sinha-060705/Compass",
+  "name": "io.github.gaurav-kumar-sinha-060705/singularity",
+  "description": "Find best-fit tools for any problem, vetted for prompt-injection risk before your agent trusts them — then execute them through a secure, audited gateway",
+  "title": "Singularity - MCP Discovery & Security Gateway",
+  "websiteUrl": "https://github.com/gaurav-kumar-sinha-060705/singularity",
   "repository": {
-    "url": "https://github.com/gaurav-kumar-sinha-060705/Compass",
+    "url": "https://github.com/gaurav-kumar-sinha-060705/singularity",
     "source": "github"
   },
-  "version": "0.1.0",
+  "version": "0.2.0",
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://compass-x86i.onrender.com/mcp"
+      "url": "https://singularity-XXXX.onrender.com/mcp"
     }
   ]
 }

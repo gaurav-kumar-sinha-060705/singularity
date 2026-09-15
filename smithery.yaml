@@ -1,14 +1,14 @@
-# Smithery listing metadata for Compass.
+# Smithery listing metadata for Singularity.
 # After deploying, submit your GitHub repo URL at https://smithery.ai/new
 # or run: npx -y @smithery/cli publish
-name: compass-mcp-gateway
-displayName: Compass - MCP Discovery & Security Gateway
-homepage: https://github.com/gaurav-kumar-sinha-060705/Compass
+name: singularity
+displayName: Singularity - MCP Discovery & Security Gateway
+homepage: https://github.com/gaurav-kumar-sinha-060705/singularity
 description: >
   Recommends the best-fit software platform or MCP tool for a user's problem,
   scoring every candidate for tool-poisoning, prompt-injection, and permission
-  risk before an agent relies on it. Tools: find_solutions, get_trust_report,
-  compare_tools.
+  risk before an agent relies on it, then gates execution through a secure,
+  audited gateway. Tools: find_solutions, get_trust_report, compare_tools.
 keywords:
   - mcp
   - mcp-server
@@ -18,6 +18,7 @@ keywords:
   - prompt-injection
   - tool-poisoning
   - agent-safety
+  - gateway
 remote:
   type: streamable-http
-  url: https://compass-x86i.onrender.com/mcp
+  url: https://singularity-XXXX.onrender.com/mcp

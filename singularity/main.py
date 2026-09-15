@@ -3,14 +3,14 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import get_settings
-from app.database import Base, SessionLocal, engine
-from app.mcp_server import build_mcp_asgi_app
-from app.middleware.rate_limit import RateLimitMiddleware
-from app.routers import recommend
-from app.services.embeddings import get_model
-from app.services.recommendation_index import index
-from app.services.seeder import seed_if_empty
+from singularity.config import get_settings
+from singularity.database import Base, SessionLocal, engine
+from singularity.mcp_server import build_mcp_asgi_app
+from singularity.middleware.rate_limit import RateLimitMiddleware
+from singularity.routers import recommend
+from singularity.services.embeddings import get_model
+from singularity.services.recommendation_index import index
+from singularity.services.seeder import seed_if_empty
 
 
 @asynccontextmanager
@@ -34,10 +34,11 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         description=(
-            "MCP Discovery & Security Gateway — recommends tools and labels trust "
-            "before an agent ever calls them."
+            "Singularity — MCP Discovery & Security Gateway. Recommends the right "
+            "tool for a problem, labels trust before an agent relies on it, and "
+            "gates execution through a secure, audited gateway."
         ),
-        version="0.1.0",
+        version="0.2.0",
         lifespan=lifespan,
     )
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])

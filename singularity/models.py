@@ -6,9 +6,9 @@ from datetime import datetime, timezone
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.database import Base
+from singularity.database import Base
 
-_IP_SALT = os.environ.get("COMPASS_IP_SALT", "compass-default-salt")
+_IP_SALT = os.environ.get("SINGULARITY_IP_SALT", "singularity-default-salt")
 
 
 def utcnow() -> datetime:

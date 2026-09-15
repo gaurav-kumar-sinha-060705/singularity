@@ -1,11 +1,11 @@
-"""Compass exposed as a native MCP server.
+"""Singularity exposed as a native MCP server.
 
 Three agent-facing tools over streamable HTTP at /mcp:
   - find_solutions(problem)      -> ranked, trust-scored recommendations
   - get_trust_report(slug)       -> full security card for one tool
   - compare_tools(slugs[])       -> side-by-side trust table
 
-Compass recommends; it never executes anything (Genesis handles execution).
+Singularity recommends, connects, and gates execution through a secure gateway.
 """
 
 from typing import Annotated
@@ -16,16 +16,16 @@ from pydantic import Field
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 
-from app.database import SessionLocal
-from app.models import Tool, log_event
-from app.services.discovery_engine import parse_intent
-from app.services.embeddings import embed_query
-from app.services.ranking import FLAG_EXPLANATIONS, rank_candidates
-from app.services.recommendation_index import PRICING_ORDER, index
+from singularity.database import SessionLocal
+from singularity.models import Tool, log_event
+from singularity.services.discovery_engine import parse_intent
+from singularity.services.embeddings import embed_query
+from singularity.services.ranking import FLAG_EXPLANATIONS, rank_candidates
+from singularity.services.recommendation_index import PRICING_ORDER, index
 
 mcp = MCPServer(
-    name="compass",
-    title="Compass - MCP Discovery & Security Gateway",
+    name="singularity",
+    title="Singularity - MCP Discovery & Security Gateway",
     description=(
         "Finds the best-fit software platform or MCP-connectable tool for a user's "
         "problem and vets every candidate for tool-poisoning / prompt-injection risk "
@@ -36,8 +36,8 @@ mcp = MCPServer(
         "and you want to know which tool/platform fits best. Every result carries a fit "
         "score (semantic match), trust score (security vetting), and flags. Read flags "
         "aloud to the user before they adopt a tool. Use get_trust_report to inspect one "
-        "candidate deeply, compare_tools to shortlist. Compass only advises - it never "
-        "executes tools."
+        "candidate deeply, compare_tools to shortlist. Singularity only advises on "
+        "selection - execution is gated through its secure gateway."
     ),
 )
 
@@ -121,8 +121,8 @@ def find_solutions(
     )
     legend = (
         "Scores: fit = semantic match to your problem (set-relative); trust = security "
-        "vetting quality; rank = weighted blend penalized by flags. Compass advises only - "
-        "execution should go through a gateway."
+        "vetting quality; rank = weighted blend penalized by flags. Singularity advises "
+        "on selection - approved calls execute through the gateway under audit."
     )
     return f"### Top solutions\n{intent_line}\n\n{body}\n\n{legend}"
 
@@ -214,7 +214,7 @@ def _configured_allowed_hosts() -> list[str]:
     """Hosts allowed by config plus, on Render, the injected external URL's host."""
     from urllib.parse import urlparse
 
-    from app.config import get_settings, parse_allowed_hosts
+    from singularity.config import get_settings, parse_allowed_hosts
 
     hosts = parse_allowed_hosts(get_settings().mcp_allowed_hosts)
     external_url = os.environ.get("RENDER_EXTERNAL_URL", "").strip()

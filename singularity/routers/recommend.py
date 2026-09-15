@@ -2,13 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.models import Tool, hash_ip, log_event
-from app.schemas import RecommendRequest, RecommendResponse, RecommendationItem
-from app.services.discovery_engine import parse_intent
-from app.services.embeddings import embed_query
-from app.services.ranking import rank_candidates
-from app.services.recommendation_index import index
+from singularity.database import get_db
+from singularity.models import Tool, hash_ip, log_event
+from singularity.schemas import RecommendRequest, RecommendResponse, RecommendationItem
+from singularity.services.discovery_engine import parse_intent
+from singularity.services.embeddings import embed_query
+from singularity.services.ranking import rank_candidates
+from singularity.services.recommendation_index import index
 
 router = APIRouter()
 

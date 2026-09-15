@@ -5,12 +5,12 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-os.environ["COMPASS_DATABASE_URL"] = "sqlite:///./data/verify.db"
-os.environ["RENDER_EXTERNAL_URL"] = "https://compass-fake.onrender.com"
+os.environ["SINGULARITY_DATABASE_URL"] = "sqlite:///./data/verify.db"
+os.environ["RENDER_EXTERNAL_URL"] = "https://singularity-fake.onrender.com"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app.main import app  # noqa: E402
+from singularity.main import app  # noqa: E402
 
 INITIALIZE = {
     "jsonrpc": "2.0",
@@ -27,11 +27,11 @@ with TestClient(app) as client:
     # 1) Public Render hostname must pass the DNS-rebinding guard
     ok = client.post(
         "/mcp", json=INITIALIZE,
-        headers={"Host": "compass-fake.onrender.com",
+        headers={"Host": "singularity-fake.onrender.com",
                  "Accept": "application/json, text/event-stream"},
     )
     assert ok.status_code == 200, f"public host rejected: {ok.status_code} {ok.text[:200]}"
-    assert ok.json()["result"]["serverInfo"]["name"] == "compass"
+    assert ok.json()["result"]["serverInfo"]["name"] == "singularity"
     print("PASS  initialize via public hostname -> 200")
 
     # 2) Unknown host must still be rejected (guard stays ON)

@@ -1,13 +1,13 @@
 import json
 
-from app.mcp_server import compare_tools, find_solutions, get_trust_report
+from singularity.mcp_server import compare_tools, find_solutions, get_trust_report
 
 
 def test_find_solutions_ranks_finance_first():
     out = find_solutions("I need to track my team's expenses and submit receipts")
     assert "expensify-mcp" in out
     assert "trust" in out.lower()
-    assert "Compass advises only" in out
+    assert "Singularity advises" in out
     assert "quickledger-pro" not in out
 
 
@@ -81,7 +81,7 @@ def test_mcp_endpoint_initialize(client):
     assert resp.status_code == 200, resp.text
     body = _parse_response(resp)
     info = body["result"]["serverInfo"]
-    assert info["name"] == "compass"
+    assert info["name"] == "singularity"
 
 
 def test_mcp_endpoint_list_and_call_tool(client):

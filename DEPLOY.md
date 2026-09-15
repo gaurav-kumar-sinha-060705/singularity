@@ -1,4 +1,4 @@
-# Deploying Compass — Render + Supabase (free tier friendly)
+# Deploying Singularity — Render + Supabase (free tier friendly)
 
 Total time: ~20 minutes of clicking. You need: a GitHub account, a Supabase account, a Render account.
 
@@ -7,12 +7,12 @@ Total time: ~20 minutes of clicking. You need: a GitHub account, a Supabase acco
 ## Step 1 — Push the repo to GitHub
 
 ```powershell
-cd "D:\Gaurav\Projects\Secure MCP Gateway\compass"
+cd "D:\Gaurav\Projects\Secure MCP Gateway\singularity"
 git init
 git add .
-git commit -m "Compass MVP: discovery + trust scoring MCP server"
-# Create an empty repo named e.g. `compass` on github.com first, then:
-git remote add origin https://github.com/<YOUR_GITHUB_USERNAME>/compass.git
+git commit -m "Singularity: MCP Discovery & Security Gateway"
+# Create an empty repo named `singularity` on github.com first, then:
+git remote add origin https://github.com/<YOUR_GITHUB_USERNAME>/singularity.git
 git push -u origin main
 ```
 
@@ -30,21 +30,23 @@ git push -u origin main
    ```
    Keep this modified string for step 3.
 
-> No schema setup needed — Compass creates its tables and seeds itself on first boot.
+> No schema setup needed — Singularity creates its tables and seeds itself on first boot.
 
 ## Step 3 — Create the Render service
 
 1. https://dashboard.render.com → **New +** → **Blueprint**
-2. Connect your GitHub account and select the `compass` repo
-3. Render reads `render.yaml`. When prompted for `COMPASS_DATABASE_URL`,
+2. Connect your GitHub account and select the `singularity` repo
+3. Render reads `render.yaml`. When prompted for `SINGULARITY_DATABASE_URL`,
    paste the modified Supabase string from step 2
 4. Click **Apply / Create** — build takes a few minutes (installs deps + bakes the embedding model)
-5. Note your service URL, e.g. `https://compass-xxxx.onrender.com`
+5. Note your service URL, e.g. `https://singularity-xxxx.onrender.com`
 
-## Step 4 — Verify the deployment
+## Step 4 — Update server.json and smoke-test
+
+Replace `XXXX` in `server.json` and `smithery.yaml` with your actual Render app name, then:
 
 ```powershell
-$u = "https://compass-xxxx.onrender.com"
+$u = "https://singularity-xxxx.onrender.com"
 Invoke-RestMethod "$u/health"                                   # expect status ok, indexed_tools 15
 powershell -ExecutionPolicy Bypass -File scripts\smoke_mcp.ps1 -BaseUrl $u
 ```
@@ -53,20 +55,19 @@ The smoke script runs a full MCP handshake against the public URL. If it passes,
 connect your editor:
 
 ```json
-{ "servers": { "compass": { "type": "http", "url": "https://compass-xxxx.onrender.com/mcp" } } }
+{ "servers": { "singularity": { "type": "http", "url": "https://singularity-xxxx.onrender.com/mcp" } } }
 ```
 
 ## Step 5 — Publish to registries
 
-1. Fill placeholders in `server.json` and `smithery.yaml`
-   (`<YOUR_GITHUB_USERNAME>`, `<YOUR_REPO_NAME>`, `<YOUR_RENDER_APP>`), commit, push
+1. Commit the updated `server.json` and `smithery.yaml`, push
 2. Official registry:
    ```powershell
    npx mcp-publisher@latest init      # validates/scaffolds server.json
    npx mcp-publisher@latest login     # choose GitHub auth → proves io.github.<you> ownership
    npx mcp-publisher@latest publish
    ```
-   Then search "compass" at https://registry.modelcontextprotocol.io
+   Then search "singularity" at https://registry.modelcontextprotocol.io
 3. Smithery: https://smithery.ai/new → submit repo URL
 4. Glama: submit your `/mcp` URL at glama.ai → then claim the auto-created listing
 5. Repo settings → Topics → add: `mcp-server`, `mcp`, `ai-security`, `agent-safety`
@@ -85,7 +86,7 @@ PulseMCP/MCP.so crawl the GitHub topic automatically within 1–2 weeks.
 
 | Symptom | Fix |
 |---|---|
-| `/mcp` returns 421 Misdirected Request | Host not allowlisted. On Render this is automatic via `RENDER_EXTERNAL_URL`; locally set `COMPASS_MCP_ALLOWED_HOSTS` |
-| Health OK but tools empty | DB was seeded without embeddings; run `python scripts/seed_index.py` locally against the same `COMPASS_DATABASE_URL`, or delete tables and reboot |
+| `/mcp` returns 421 Misdirected Request | Host not allowlisted. On Render this is automatic via `RENDER_EXTERNAL_URL`; locally set `SINGULARITY_MCP_ALLOWED_HOSTS` |
+| Health OK but tools empty | DB was seeded without embeddings; run `python scripts/seed_index.py` locally against the same `SINGULARITY_DATABASE_URL`, or delete tables and reboot |
 | Build fails on model download | Transient network in build container — Retry deploy |
-| 429 responses | Rate limit hit; raise `COMPASS_RATE_LIMIT_PER_MIN` in dashboard env vars |
+| 429 responses | Rate limit hit; raise `SINGULARITY_RATE_LIMIT_PER_MIN` in dashboard env vars |

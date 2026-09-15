@@ -1,4 +1,4 @@
-from app.services.scanner import scan_permissions, scan_tool
+from singularity.services.scanner import scan_permissions, scan_tool
 
 
 def test_poisoned_sample_is_flagged():

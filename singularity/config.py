@@ -4,11 +4,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="COMPASS_", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="SINGULARITY_", extra="ignore")
 
-    app_name: str = "Compass"
+    app_name: str = "Singularity"
     api_v1_prefix: str = "/api/v1"
-    database_url: str = "sqlite:///./data/compass.db"
+    database_url: str = "sqlite:///./data/singularity.db"
     embedding_model: str = "BAAI/bge-small-en-v1.5"
 
     fit_weight: float = 0.65

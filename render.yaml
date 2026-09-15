@@ -2,15 +2,15 @@
 # Docs: https://render.com/docs/blueprint-spec
 services:
   - type: web
-    name: compass
+    name: singularity
     runtime: docker
     plan: free # switch to `starter` ($7/mo) for always-on — registries re-crawl weekly
               # and strip verified badges from sleeping free instances
     healthCheckPath: /health
     envVars:
       # Render injects RENDER_EXTERNAL_URL automatically; the MCP host allowlist
-      # picks it up at boot (see app/mcp_server.py).
-      - key: COMPASS_DATABASE_URL
+      # picks it up at boot (see singularity/mcp_server.py).
+      - key: SINGULARITY_DATABASE_URL
         sync: false # set in dashboard: postgresql+psycopg://postgres:PASS@db.<ref>.supabase.co:5432/postgres?sslmode=require
-      - key: COMPASS_RATE_LIMIT_PER_MIN
+      - key: SINGULARITY_RATE_LIMIT_PER_MIN
         value: "300"

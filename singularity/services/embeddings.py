@@ -3,7 +3,7 @@ import threading
 
 import numpy as np
 
-from app.config import get_settings
+from singularity.config import get_settings
 
 _lock = threading.Lock()
 _model = None

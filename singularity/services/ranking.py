@@ -1,4 +1,4 @@
-from app.config import get_settings
+from singularity.config import get_settings
 
 CATEGORY_PRIOR_BOOST = 0.06
 
