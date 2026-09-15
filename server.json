@@ -8,11 +8,11 @@
     "url": "https://github.com/gaurav-kumar-sinha-060705/singularity",
     "source": "github"
   },
-  "version": "0.2.0",
-  "remotes": [
-    {
-      "type": "streamable-http",
-      "url": "https://singularity-XXXX.onrender.com/mcp"
-    }
-  ]
+"version": "0.2.0",
+    "remotes": [
+      {
+        "type": "streamable-http",
+        "url": "https://singularity-6q6c.onrender.com/mcp"
+      }
+    ]
 }
