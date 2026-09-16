@@ -32,6 +32,17 @@ class Settings(BaseSettings):
     execute_min_trust: float = 0.6
     provider_http_timeout: float = 10.0
 
+    # Tier 2 — hosted MCP remotes (RemoteMcpProvider). Only hosts in this list
+    # may be connected to; anything else (incl. arbitrary user URLs) is refused
+    # as an SSRF guard.
+    remote_mcp_timeout: float = 15.0
+    remote_list_tools_ttl: float = 300.0
+    remote_mcp_allowed_hosts: str = (
+        "mcp.stripe.com,mcp.notion.com,server.smithery.ai,"
+        "waystation.ai,mcp.mcparmory.com,gateway.pipeworx.io,"
+        "mcp.mcparmory.com,slacking.biz,nexgendata-mcp-proxy.steve-corbett.com"
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:

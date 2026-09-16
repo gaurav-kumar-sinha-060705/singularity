@@ -214,20 +214,23 @@ def compare_tools(
 
 @mcp.tool(
     description=(
-        "List the public, zero-setup tools that can be executed through the "
-        "Singularity gateway. Each entry shows its slug, category, and granted "
-        "scopes. Use list_public_tools to discover what call_tool can run."
+        "List the public tools that can be executed through the Singularity "
+        "gateway. Each entry shows its slug, category, granted scopes, and "
+        "whether it is a hosted remote (auth_required). Use list_public_tools "
+        "to discover what call_tool can run."
     ),
 )
 def list_public_tools() -> str:
     tools = registry.list_public_tools()
     if not tools:
         return "### Executable public tools\nnone"
-    lines = [
-        f"- `{t['slug']}` — {t['name']} — {t['category']} — "
-        f"scopes: {', '.join(t['scopes'])}"
-        for t in tools
-    ]
+    lines = []
+    for t in tools:
+        extra = " — hosted remote (auth required)" if t.get("hosted") and t.get("auth_required") else ""
+        lines.append(
+            f"- `{t['slug']}` — {t['name']} — {t['category']} — "
+            f"scopes: {', '.join(t['scopes'])}{extra}"
+        )
     return (
         "### Executable public tools\n" + "\n".join(lines) + "\n\n"
         "Run one with call_tool(provider_slug=\"<slug>\", arguments={...}, scope=\"public:read\")."
@@ -236,12 +239,15 @@ def list_public_tools() -> str:
 
 @mcp.tool(
     description=(
-        "Execute a first-party public tool through the audited Singularity gateway: "
-        "weather (current conditions for a city), npms_lookup (npm package info), "
-        "pypi_lookup (PyPI package info), web_search (DuckDuckGo instant answers). "
-        "The call is scope-checked, trust-checked, and written to the audit log; "
-        "denied or failed calls return the reason. Use list_public_tools to see "
-        "what's available, and find_solutions to be told which slugs fit a problem."
+        "Execute a tool through the audited Singularity gateway. First-party "
+        "keyless tools: weather (current conditions for a city), npms_lookup "
+        "(npm package info), pypi_lookup (PyPI package info), web_search "
+        "(DuckDuckGo instant answers). Hosted remotes (e.g. stripe-mcp) are "
+        "listed but require a credential connection (Phase 4.5) and currently "
+        "return a refused reason. The call is scope-checked, trust-checked, "
+        "and written to the audit log; denied or failed calls return the "
+        "reason. Use list_public_tools to see what's available, and "
+        "find_solutions to be told which slugs fit a problem."
     ),
 )
 def call_tool(

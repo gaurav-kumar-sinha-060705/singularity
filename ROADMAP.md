@@ -26,13 +26,14 @@
 | Phase 0 decision: stack locked | ✅ Python 3.11 + FastAPI + SQLAlchemy + fastembed (ONNX, no torch) |
 | Phase 1 + 1.5 code | ✅ Curated recommender + native MCP server (`app/`) |
 | Phase 2 rename (Compass → Singularity) | ✅ Complete: package `app/`, env `SINGULARITY_*`, repo `singularity`, zero `compass` traces in code |
-| Live deployment | ✅ Render + Supabase (`https://singularity-osd2.onrender.com`), `/health` → `indexed_tools: 15`; MCP at `/mcp` (`find_solutions`, `get_trust_report`, `compare_tools`) |
+| Live deployment | ✅ Render + Supabase (`https://singularity-osd2.onrender.com`), `/health` → `indexed_tools: 19`; MCP at `/mcp` (`find_solutions`, `get_trust_report`, `compare_tools`, `list_public_tools`, `call_tool`) |
 | Database hardening | ✅ Postgres advisory lock + deterministic uuid5 IDs + embedding auto-heal backfill (`prepare_threshold=None` for Supabase pooler) |
 | Official MCP Registry | ✅ `io.github.gaurav-kumar-sinha-060705/singularity` v0.2.0 **active**; old `compass-mcp-gateway` **deleted** |
 | Smithery / Arcade | ✅ `gaurav060705/singularity` published (3 tools detected); cosmetic gap: "No description" in listing |
 | Glama | ✅ Ownership verified (HTTP challenge), Status Healthy, Last Tested 2026-09-15; search index still crawling (24–48h) |
 | GitHub repo | ✅ **Public** (`gaurav-kumar-sinha-060705/singularity`), discovery topics + description set, visible to crawlers |
-| Tests | ✅ 25 pytest green (API + scanner + MCP tools & endpoint + glama claim) |
+| Execution gateway (Phase 3) | ✅ 4 keyless providers (weather, npms_lookup, pypi_lookup, web_search) execute through scope+trust+audit enforcer; MCP `call_tool` + `list_public_tools` live |
+| Tests | ✅ 51 pytest green (API + scanner + MCP tools & endpoint + glama claim + providers + execute) |
 
 ---
 
@@ -48,12 +49,28 @@
   Curated index ─────────┘                                             │
   Public registries ──► Crawler ──► Trust & Provenance Engine ─────────┘
   (Phase 5)                          • static injection scanner
-                                     • LLM injection classifier (Phase 4)
-                                     • publisher reputation (Phase 4)
+                                     • LLM injection classifier (Phase 5)
+                                     • publisher reputation (Phase 5)
                                      • permission-overreach check
                                          │
                                          ▼  approve ──► Gateway proxy (execution + audit)
 ```
+
+### Execution reach (three-tier model) — the load-bearing constraint
+
+A hosted gateway can only reach servers **over HTTP**. local stdio servers are
+processes on the user's machine and are physically unreachable from Render — for
+Singularity, for Claude.ai, for every hosted client. Execution is therefore tiered:
+
+| Tier | What executes | Reach from Render | Auth |
+|---|---|---|---|
+| **1 — Keyless APIs** | Free public REST APIs wrapped as first-party providers (weather, npm, PyPI, web search) | ✅ HTTP | none |
+| **2 — Hosted MCP remotes** | Vetted, hosted `streamable-http`/SSE MCP servers we proxy as an **MCP client** (Stripe, Notion, Smithery-hosted, Pipeworx-hosted…) | ✅ HTTP | user API key/OAuth (Phase 4 vault) |
+| **3 — Local stdio** | stdio-only servers (the long tail: most of the registry) | ❌ not reachable | user connects locally |
+| — **Run-stdio-ourselves** | Singularity containers the server (Smithery/Glama-style) | future infra decision | — |
+
+Every executable surface advertises a `hosted_variant` (remote URL) when one exists;
+stdio-only tools remain **recommend + vet + user-connects-locally**.
 
 ---
 
@@ -67,12 +84,13 @@
 | 2b | Live deploy (Render + Supabase) hardened: pooler-safe prepared statements, seeded embeddings auto-heal | ✅ |
 | 2c | Registry published under `io.github.gaurav-kumar-sinha-060705/singularity` | ✅ |
 | 2d | Distribution verified across all channels: official registry active, Smithery/Arcade live, Glama claimed + healthy, GitHub public with discovery topics | ✅ |
+| 3 | Execution gateway: provider framework + 4 keyless providers, `POST /api/v1/execute`, scope+trust+audit enforcer, MCP `call_tool`/`list_public_tools`, seeder sync-missing → `indexed_tools: 19` | ✅ |
 
 ---
 
-## 5. Phase 3 — Execution Gateway *(queued — NOT started)*
+## 5. Phase 3 — Execution Gateway ✅ *(shipped, verified live)*
 
-### 5.1 Scope
+### 5.1 Shipped scope
 
 **Providers (first-party, public, zero-setup tools — no API keys).** Decisions locked:
 - Only **first-party, keyless, read-only** providers execute through the gateway
@@ -80,7 +98,7 @@
 - Third-party tools stay **advisory** (no provider → refused: "no gateway provider").
 - All providers share the single read-only scope `public:read`.
 
-**Milestone 3.0 (first demo-able cut): 4 keyless providers.**
+**Milestone 3.0 delivered: 4 keyless providers.**
 
 1. **Provider adapter framework** — `app/providers/` + base `Provider` abstraction
    (`name`, `scopes[]`, `validate(args)`, `execute(args)`, docs URL). One file per provider.
@@ -94,50 +112,74 @@
 4. **Scope enforcer** — refuse calls outside granted scopes (`public:read`); denied calls
    land in the audit trail with `decision="denied"` + reason. Blocks low-trust tools
    (`trust_score < execute_min_trust`).
-5. **Seed additions** — register the 4 providers in `seed_tools.json` so
-   `find_solutions` can return them; execution then flows recommendation → approve → gate → execute.
-   - **Seeder behavior change (decided):** boot path ingests *missing slugs* in addition to
-     empty-seed, so the already-deployed prod DB picks up the new providers on next deploy
-     without a manual reseed. Existing rows untouched; advisory lock retained.
+5. **Seed additions** — 4 providers registered in `seed_tools.json`;
+   `find_solutions` returns them; execution flows recommendation → approve → gate → execute.
+   - **Seeder behavior change:** boot path ingests *missing slugs* so deployed prod DB
+     picks up new providers without a manual reseed. Existing rows untouched; advisory lock retained.
 6. **MCP tools** — `call_tool(provider_slug, arguments, scope?)` gates through the same
    enforcer; `list_public_tools()` exposes what is executable.
 
 **Config additions:** `execute_enabled`, `execute_min_trust=0.6`, `provider_http_timeout=10.0`.
-No new dependencies (httpx already present); Dockerfile unchanged.
 
-**Acceptance:**
-- An agent asks *"what's the weather in London"* → `find_solutions` returns the `weather`
-  provider → `call_tool` executes through the gateway → audit row written.
-- A denied call (e.g. `github:write` attempted on a read-only provider) is refused with
-  an audit trail.
-- A poisoned tool (existing `suspicious_*` flags) is **blocked from execution** even if
-  it matches the query.
-- Live health shows `indexed_tools: 19` (15 + 4 providers) proving seed-sync delivered.
+**Verified live (acceptance passed):**
+- Agent executed **all 4 providers through Claude** against the live deployment
+  (`list_public_tools` → `call_tool`), all audited; `web_search` timed out on one
+  user-network attempt (timeout config handles it as a non-fatal gateway failure).
+- Weather executed live (London 14.3°C); pypi_lookup live via MCP `call_tool`.
+- Denied scope → 403 + audit row; local health `indexed_tools: 19`.
 
-**After acceptance:** re-publish official registry / Smithery / Glama with the new
-execution surface (`list_public_tools` + `call_tool`).
+**Result:** Tier 1 (keyless execution) is live end-to-end. `list_public_tools` +
+`call_tool` published to the official registry / Smithery / Glama.
 
-### 5.2 Resolved decisions
+### 5.2 Resolved decisions (Phase 3)
 
 - Auth: local-only first (no API keys for first-party providers) + terse gateway token later.
 - Sandbox: same-process for well-known keyless tools, HTTPS + timeout only.
 - Provider registry: self-hosted manifest; one provider class per file.
-- Re-publish cadence: after Phase 3 verified live.
+- Re-publish cadence: after each phase verified live.
 
 ---
 
-## 6. Phase 4 — One-Click OAuth (personal tools)
+## 6. Phase 4 — Hosted MCP Execution + One-Click OAuth
 
-Slack, GitHub, Gmail, Google Calendar — one-click connect like Zapier.
-Capability tokens (short-TTL, scoped) issued per connection. Gateway enforces scope on every call.
+Two workstreams. This is where Singularity becomes an **MCP client** (Tier 2).
+
+### 6A. Remote MCP adapter (Tier 2 — proxy hosted `streamable-http` remotes)
+
+- New `RemoteMcpProvider` — a provider backed by a hosted MCP server URL,
+  discovered from the registry listing's `remotes[]` (`type: streamable-http`).
+- Connect via the `mcp` SDK client stack: `streamable_http_client(url, http_client=…)`
+  + `ClientSession` (`initialize` → `list_tools()` → `call_tool()`).
+- Same gateway contract as Tier 1: scope + trust + audit enforcer; a call to a remote
+  tool surfaces as one `call_tool(provider_slug=…, arguments=…)` exactly like Tier 1.
+- Enumerate the **executable set across our curated catalog**: which of the 15 indexed
+  third-party tools have a hosted variant (official vs Smithery/McParMory/Pipeworx/WayStation
+  hosted proxies) → seed `hosted_variant.url` + `is_executable`.
+- **Safety guards (non-negotiable):**
+  - Allowlist of hostnames (pre-verified at seed time) — no arbitrary user-supplied URLs (SSRF).
+  - Per-remote installed tools must pass the same vetting; `executable` only after scan.
+  - Timeouts + no redirect-follow to internal addresses; audit on every remote call.
+
+### 6B. Credential vault + One-Click OAuth
+
+Slack, GitHub, Gmail, Google Calendar, **Stripe** — one-click connect like Zapier.
+Capability tokens (short-TTL, scoped) issued per connection. Gateway enforces scope on
+every call. OAuth lets hosted remotes work **without us storing raw API keys** (auth
+travels as HTTP headers/OAuth, which a hosted gateway can carry — the thing stdio
+cannot do).
 
 ---
 
 ## 7. Phase 5 — Trust Depth + Scale
 
 - LLM injection classifier + labeled dataset (poisoned vs clean descriptions)
-- Registry crawlers feed new candidates through the vetting pipeline
-- Index past 200+ vetted tools
+- Registry crawlers feed new candidates through the vetting pipeline — and record
+  each candidate's `remotes[]`/hosted-variant so the executable (Tier 2) set grows
+  automatically as servers publish HTTP endpoints
+- Index past 200+ vetted tools; recommend hosted variants for the long stdio tail
+- (Decision deferred) **Run-stdio-ourselves**: containerize stdio servers
+  (Smithery/Glama-style) to make the entire catalog executable — infra + security
+  cost vs. value; revisit once credentials + vault + Tier-2 demand are proven
 - Enterprise dashboard/billing (API keys, usage analytics)
 
 ---
@@ -149,7 +191,8 @@ Product scenarios that drive roadmap priorities. Each carries the phase it unloc
 | # | Use case | What it means for the agent | Phase |
 |---|---|---|---|
 | 1 | **"My team needs expense tracking"** | `find_solutions` returns finance tools ranked by fit + trust; flags read aloud; agent adopts a vetted tool | ✅ now |
-| 2 | **"Look up the weather / an npm package / a PyPI library / research a topic"** | Same discovery path, but the agent then **executes** through the gateway under audit | 3 |
+| 2 | **"Look up the weather / an npm package / a PyPI library / research a topic"** | Same discovery path, but the agent then **executes** through the gateway under audit | 3 ✅ |
+| 2b | **"Call my hosted Stripe/Notion/GitHub MCP through Singularity"** | Gateway proxies the hosted remote (MCP client) under scope+trust+audit | 4 |
 | 3 | **"Use my Slack / GitHub / Gmail through Singularity"** | One-click OAuth connect; scoped capability tokens; gateway enforces scope on every call | 4 |
 | 4 | **"Is this plugin safe to install?"** | Deep trust report: permissions overreach, injection verdicts, publisher reputation, LLM-classifier reading | 5 |
 | 5 | **"Monitor every tool call my team's agents make"** | Enterprise audit dashboard: who asked, what was served, what executed, latency, denials | 5 |
@@ -164,7 +207,7 @@ Product scenarios that drive roadmap priorities. Each carries the phase it unloc
 | Gate | When | What exists | Ask |
 |---|---|---|---|
 | **A — Pre-seed/grants** | Phase 3 shipped (gateway live) | Live demo + caught-poisoning + denied-call moment + audit trail | Classifier dataset + index to 200+ tools |
-| **B** | Phase 4 mid | Execution gateway + OAuth working | Scale vetting ops, design partners |
+| **B** | Phase 4 mid | Execution gateway + hosted-remote proxy (Tier 2) + OAuth working | Scale vetting ops, design partners |
 | **C** | Phase 5 early | Enterprise features | Infra + GTM |
 
 ---
@@ -181,6 +224,10 @@ Product scenarios that drive roadmap priorities. Each carries the phase it unloc
 | Keyless upstream outages (Open-Meteo, npms.io, PyPI, DDG) | Timeout + non-fatal gateway failures; result embeds error, audit still written |
 | Seeder sync changes boot behavior | Ingest missing slugs only; existing rows untouched; advisory lock retained; full pytest gate |
 | Free-tier cold starts delay the first request (~50s) | Starter plan ($7/mo) during listing/investor periods; already documented |
+| Remote MCP endpoints are third-party surfaces | Allowlist of pre-vetted hostnames only; no arbitrary URLs from user input (SSRF guard); timeouts; audit every remote call |
+| stdio-only servers not executable from hosted gateway | Three-tier model is explicit: stdio = recommend + user connects locally; only hosted remotes execute; run-stdio-ourselves deferred to Phase 5 |
+| Third-party hosted proxies (Smithery/McParMory/Pipeworx) may gate on their own tokens | Tier-2 auth flows through Phase 4 vault (OAuth/encrypted keys); tools without a hosted variant stay advisory |
+| Registry search API is slow/flaky (timeouts seen) | Enrichment runs offline (seeder/sync), resilient with retry + cache; never on the request hot path |
 
 ---
 
