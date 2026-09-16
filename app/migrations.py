@@ -15,6 +15,12 @@ def _dialect(engine) -> str:
     return engine.dialect.name
 
 
+def _table_names(engine) -> set[str]:
+    if _dialect(engine) == "sqlite":
+        return {row[0] for row in engine.connect().execute(text("SELECT name FROM sqlite_master WHERE type='table'")).all()}
+    return set(inspect(engine).get_table_names())
+
+
 def _columns(db, table: str) -> set[str]:
     if _dialect(db.get_bind()) == "sqlite":
         cols = {row[1] for row in db.execute(text(f"PRAGMA table_info({table})")).all()}
@@ -34,6 +40,19 @@ def _add_column(db, table: str, column: str, dtype: str) -> None:
 
 
 def run(db: Session) -> None:
+    # New tables are created by Base.metadata.create_all at boot; this run also
+    # auto-creates them for dev databases that already executed create_all once.
+    engine = db.get_bind()
+    already = {t for t in _table_names(engine)}
+    from app.database import Base
+    from app import models  # noqa: F401  ensure models registered
+
+    for table in ("oauth_clients", "oauth_auth_codes", "oauth_tokens"):
+        if table not in already:
+            Base.metadata.tables[table].create(bind=engine)
+            db.commit()
+            print(f"[singularity] migration: created table {table}")
+
     try:
         tool_cols = _columns(db, "tools")
     except Exception:

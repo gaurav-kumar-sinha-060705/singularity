@@ -1,11 +1,16 @@
 import asyncio
 import json
+import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from app.database import SessionLocal
-from app.models import AuditLog
-from app.providers import registry
-from app.providers.remote import RemoteMcpProvider
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from oauth_helpers import issue_oauth_access_token  # noqa: E402
+
+from app.database import SessionLocal  # noqa: E402
+from app.models import AuditLog  # noqa: E402
+from app.providers import registry  # noqa: E402
+from app.providers.remote import RemoteMcpProvider  # noqa: E402
 
 
 class FakeSession:
@@ -189,18 +194,26 @@ def test_end_to_end_user_credential_unlocks_remote(client, monkeypatch):
 
 
 def test_mcp_endpoint_authed_call_tool_uses_vault(client, monkeypatch):
-    """Bearer token on /mcp resolves user -> vault credential -> hosted remote."""
+    """OAuth access token on /mcp resolves user -> vault credential -> hosted remote."""
     _stub_session(monkeypatch)
-    email = f"mcp-e2e{int(__import__('time').time() * 1000000)}@example.com"
+    # 1) Create user via the REST auth endpoint (gets a JWT for /api/v1/*)
+    import secrets as _secrets
+    email = f"mcp-e2e{_secrets.token_hex(8)}@example.com"
     tokens = client.post("/api/v1/auth/signup",
                          json={"email": email, "password": "hunter2hunter"}).json()
-    auth = {"Authorization": f"Bearer {tokens['access_token']}",
-            "Accept": "application/json, text/event-stream"}
+    jwt_headers = {"Authorization": f"Bearer {tokens['access_token']}"}
 
+    # 2) Create connection with the JWT (the connections endpoint uses /api/v1 auth)
     conn = client.post("/api/v1/connections",
                        json={"provider_slug": "stripe-mcp", "credential": {"api_key": "sk_test_abc"}},
-                       headers=auth)
+                       headers=jwt_headers)
     assert conn.status_code == 201, conn.text
+
+    # 3) Get an MCP OAuth access token for the SAME email (reuse the user we just created)
+    from oauth_helpers import issue_oauth_access_token
+    mcp_token, _ = issue_oauth_access_token(client, email=email, password="hunter2hunter")
+    auth = {"Authorization": f"Bearer {mcp_token}",
+            "Accept": "application/json, text/event-stream"}
 
     def _rpc(method, params, id_):
         return {"jsonrpc": "2.0", "id": id_, "method": method, "params": params}

@@ -13,12 +13,13 @@ import os
 
 from pydantic import Field
 
+from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 
+from app.config import get_settings
 from app.database import SessionLocal
-from app.mcp_auth import current_user_id as mcp_current_user_id
-from app.mcp_auth import resolve_access_user, reset_user, scope_user
+from app.mcp_oauth import SingularityOAuthProvider
 from app.models import Tool, log_event
 from app.providers import registry
 from app.services.discovery_engine import parse_intent
@@ -43,9 +44,35 @@ mcp = MCPServer(
         "candidate deeply, compare_tools to shortlist. Singularity only advises on "
         "selection - execution is gated through its secure gateway."
     ),
+    auth_server_provider=SingularityOAuthProvider(),
+    auth=AuthSettings(
+        issuer_url=f"{get_settings().oauth_public_base}",
+        resource_server_url=f"{get_settings().oauth_public_base}/mcp",
+        service_documentation_url=f"{get_settings().oauth_public_base}/health",
+        client_registration_options=ClientRegistrationOptions(
+            enabled=True,
+            default_scopes=["mcp:tools"],
+        ),
+        revocation_options=RevocationOptions(enabled=True),
+        required_scopes=["mcp:tools"],
+    ),
 )
 
 TRUST_BANDS = ((0.85, "strong"), (0.60, "acceptable"), (-1.0, "weak"))
+
+
+def _mcp_user_id() -> str | None:
+    """User_id of the authenticated MCP caller (from the SDK OAuth auth context).
+
+    The SDK's AuthenticationMiddleware + AuthContextMiddleware resolve the Bearer
+    access token via `load_access_token`; its `subject` is the Singularity user_id.
+    Null when unauthenticated (should not happen once 'Sign in now' is enforced,
+    but kept defensive so public:read tool calls degrade gracefully).
+    """
+    from mcp.server.auth.middleware.auth_context import get_access_token
+
+    token = get_access_token()
+    return token.subject if token else None
 
 
 def _trust_band(score: float) -> str:
@@ -265,7 +292,7 @@ def call_tool(
         arguments or {},
         scope=scope,
         channel="mcp",
-        user_id=mcp_current_user_id(),
+        user_id=_mcp_user_id(),
     )
 
     if out["decision"] == "not_found":
@@ -316,9 +343,11 @@ def build_mcp_asgi_app():
     DNS-rebinding protection stays ON; the allowlist comes from settings plus,
     when deployed on Render, the platform-injected external URL.
 
-    Wrapped by an auth-aware middleware: a valid Bearer access token on the
-    request resolves the user (auto-provisioning the row on first use) and
-    publishes user_id on a contextvar consumed by call_tool.
+    Native OAuth (RFC 9745): the MCPServer is constructed with an
+    `auth_server_provider` + `AuthSettings`, so the SDK mounts the authorization
+    server routes (/.well-known/oauth-authorization-server, /authorize, /token,
+    /register, /revoke), requires a bearer access token on /mcp, and publishes
+    the verified user via its auth context — which call_tool() reads.
     """
     app = mcp.streamable_http_app(
         stateless_http=True,
@@ -329,20 +358,4 @@ def build_mcp_asgi_app():
             allowed_origins=["http://localhost:*", "http://127.0.0.1:*", "http://[::1]:*"],
         ),
     )
-
-    async def _auth_middleware(scope, receive, send):
-        if scope["type"] != "http":
-            await app(scope, receive, send)
-            return
-        headers = dict((k.decode("latin-1").lower(), v.decode("latin-1"))
-                       for k, v in scope.get("headers", []))
-        user_id = resolve_access_user(headers.get("authorization"))
-        ctx = scope_user(user_id)
-        try:
-            await app(scope, receive, send)
-        finally:
-            reset_user(ctx)
-
-    # Keep the underlying app's router reachable (main.py lifespan uses it).
-    _auth_middleware.router = getattr(app, "router", None)
-    return _auth_middleware
+    return app

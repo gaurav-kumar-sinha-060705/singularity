@@ -153,3 +153,64 @@ class Connection(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     user = relationship("User")
+
+
+class OAuthClient(Base):
+    """Dynamically registered MCP OAuth client (RFC 7591)."""
+
+    __tablename__ = "oauth_clients"
+
+    client_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    client_secret_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    client_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    redirect_uris_json: Mapped[str | None] = mapped_column(Text)
+    scope: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    grant_types_json: Mapped[str | None] = mapped_column(Text)
+    token_endpoint_auth_method: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    @property
+    def redirect_uris(self) -> list:
+        return _loads(self.redirect_uris_json)
+
+    @property
+    def grant_types(self) -> list:
+        return _loads(self.grant_types_json)
+
+
+class OAuthAuthCode(Base):
+    """One-time authorization code with PKCE binding (RFC 7636)."""
+
+    __tablename__ = "oauth_auth_codes"
+
+    code: Mapped[str] = mapped_column(String(128), primary_key=True)
+    client_id: Mapped[str] = mapped_column(String(64), index=True)
+    user_id: Mapped[str] = mapped_column(String(36), index=True)
+    code_challenge: Mapped[str] = mapped_column(String(128))
+    redirect_uri: Mapped[str] = mapped_column(Text)
+    scopes_json: Mapped[str | None] = mapped_column(Text)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    @property
+    def scopes(self) -> list:
+        return _loads(self.scopes_json)
+
+
+class OAuthToken(Base):
+    """Issued access + refresh tokens for an MCP client on behalf of a user."""
+
+    __tablename__ = "oauth_tokens"
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    refresh_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    client_id: Mapped[str] = mapped_column(String(64), index=True)
+    user_id: Mapped[str] = mapped_column(String(36), index=True)
+    scopes_json: Mapped[str | None] = mapped_column(Text)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    @property
+    def scopes(self) -> list:
+        return _loads(self.scopes_json)

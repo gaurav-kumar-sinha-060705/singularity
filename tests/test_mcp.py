@@ -1,10 +1,14 @@
 import json
+import sys
+from pathlib import Path
 
 import pytest
 
-from app.database import SessionLocal
-from app.mcp_server import call_tool, compare_tools, find_solutions, get_trust_report, list_public_tools
-from app.models import User
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from oauth_helpers import issue_oauth_access_token  # noqa: E402
+from app.database import SessionLocal  # noqa: E402
+from app.mcp_server import call_tool, compare_tools, find_solutions, get_trust_report, list_public_tools  # noqa: E402
+from app.models import User  # noqa: E402
 
 
 def test_find_solutions_ranks_finance_first():
@@ -81,7 +85,13 @@ HEADERS = {"Accept": "application/json, text/event-stream"}
 
 
 def test_mcp_endpoint_initialize(client):
-    resp = client.post("/mcp", json=_rpc("initialize", INITIALIZE), headers=HEADERS)
+    """initialize requires a valid OAuth access token (Sign in now)."""
+    token, _ = issue_oauth_access_token(client)
+    resp = client.post(
+        "/mcp",
+        json=_rpc("initialize", INITIALIZE),
+        headers={**HEADERS, "Authorization": f"Bearer {token}"},
+    )
     assert resp.status_code == 200, resp.text
     body = _parse_response(resp)
     info = body["result"]["serverInfo"]
@@ -89,13 +99,15 @@ def test_mcp_endpoint_initialize(client):
 
 
 def test_mcp_endpoint_list_and_call_tool(client):
-    client.post("/mcp", json=_rpc("initialize", INITIALIZE), headers=HEADERS)
+    token, _ = issue_oauth_access_token(client)
+    auth_headers = {**HEADERS, "Authorization": f"Bearer {token}"}
+    client.post("/mcp", json=_rpc("initialize", INITIALIZE), headers=auth_headers)
     resp = client.post(
         "/mcp",
         json=_rpc("tools/call", {"name": "find_solutions",
                                  "arguments": {"problem": "monitor errors in production"}},
                   id_=2),
-        headers=HEADERS,
+        headers=auth_headers,
     )
     assert resp.status_code == 200, resp.text
     body = _parse_response(resp)
@@ -127,16 +139,9 @@ def test_list_public_tools_lists_providers():
     assert "call_tool" in out
 
 
-def test_mcp_auth_resolves_user_and_provisions(client, monkeypatch):
-    """A valid Bearer token on /mcp resolves the user and auto-provisions."""
-    email = f"mcp-auth{int(__import__('time').time() * 1000000)}@example.com"
-    tokens = client.post(
-        "/api/v1/auth/signup",
-        json={"email": email, "password": "hunter2hunter"},
-    ).json()
-
-    from app.database import SessionLocal
-    from app.models import User
+def test_mcp_auth_resolves_user_and_provisions(client):
+    """OAuth access token on /mcp resolves the user (created at consent)."""
+    token, email = issue_oauth_access_token(client)
 
     db = SessionLocal()
     try:
@@ -145,19 +150,21 @@ def test_mcp_auth_resolves_user_and_provisions(client, monkeypatch):
         db.close()
     assert user is not None
 
+    auth_headers = {
+        "Accept": "application/json, text/event-stream",
+        "Authorization": f"Bearer {token}",
+    }
     resp = client.post(
         "/mcp",
         json=_rpc("initialize", INITIALIZE),
-        headers={"Accept": "application/json, text/event-stream",
-                 "Authorization": f"Bearer {tokens['access_token']}"},
+        headers=auth_headers,
     )
     assert resp.status_code == 200, resp.text
 
     resp = client.post(
         "/mcp",
         json=_rpc("tools/call", {"name": "list_public_tools", "arguments": {}}, id_=2),
-        headers={"Accept": "application/json, text/event-stream",
-                 "Authorization": f"Bearer {tokens['access_token']}"},
+        headers=auth_headers,
     )
     assert resp.status_code == 200, resp.text
     body = _parse_response(resp)
@@ -165,14 +172,15 @@ def test_mcp_auth_resolves_user_and_provisions(client, monkeypatch):
     assert "weather" in text
 
 
-def test_mcp_auth_invalid_token_is_anonymous(client):
+def test_mcp_auth_invalid_token_is_rejected(client):
+    """An invalid bearer token returns 401 (not anonymous access)."""
     resp = client.post(
         "/mcp",
         json=_rpc("initialize", INITIALIZE),
         headers={"Accept": "application/json, text/event-stream",
                  "Authorization": "Bearer not.a.valid.token"},
     )
-    assert resp.status_code == 200, resp.text
+    assert resp.status_code == 401
 
 
 def test_call_tool_weather_executes(monkeypatch):

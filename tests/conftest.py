@@ -6,12 +6,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ["SINGULARITY_DATABASE_URL"] = "sqlite:///./data/test.db"
+os.environ["SINGULARITY_OAUTH_PUBLIC_BASE"] = "https://testserver"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.main import app  # noqa: E402
-from app.database import Base, SessionLocal, engine
-from app.migrations import run as run_migrations
+from app.database import Base, SessionLocal, engine  # noqa: E402
+from app.migrations import run as run_migrations  # noqa: E402
 from scripts.seed_index import seed  # noqa: E402
 
 
