@@ -66,6 +66,6 @@ def run(db: Session) -> None:
          "execution_tier VARCHAR(20) NOT NULL DEFAULT 'unknown'"),
     ]
 
-    for table, col, _dtype, full_def in migrations:
+    for table, col, dtype, _full_def in migrations:
         if col not in tool_cols:
-            _add_column(db, table, col, full_def)
+            _add_column(db, table, col, dtype)

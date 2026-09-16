@@ -10,10 +10,12 @@ table).
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy import inspect as sa_inspect
 
-from app.migrations import _columns
+from app.migrations import _columns, run as run_migrations
+
+from sqlalchemy.orm import Session
 
 
 class _PostgresBind:
@@ -57,3 +59,32 @@ def test_sqlite_branch_still_works():
 
     with Session(engine) as db:
         assert _columns(db, "tools") == {"id", "slug"}
+
+
+def test_run_migration_adds_columns_on_missing_drifted_schema():
+    """End-to-end: run() ALTERs requires_credential + execution_tier when the
+    tools table is missing them (simulates production Postgres schema drift
+    that the previous duplicate-column-name SQL bug caused).
+    """
+    engine = create_engine("sqlite://")
+    # Create a minimal tools table WITHOUT the two evolving columns — the
+    # way the Supabase DB looked before the migration ever ran.
+    with engine.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE tools ("
+            "  id TEXT PRIMARY KEY, slug TEXT, name TEXT, publisher TEXT,"
+            "  publisher_verified BOOLEAN, category TEXT, description TEXT,"
+            "  mcp_available BOOLEAN, pricing_tier TEXT, integrations TEXT,"
+            "  permissions_requested TEXT, permissions_needed TEXT,"
+            "  trust_score REAL, trust_flags TEXT, source TEXT,"
+            "  embedding_dim INTEGER, embedding BLOB,"
+            "  created_at TIMESTAMP, updated_at TIMESTAMP"
+            ")"
+        ))
+    with Session(engine) as db:
+        run_migrations(db)
+    # Columns should now exist
+    with engine.connect() as conn:
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(tools)")).all()}
+    assert "requires_credential" in cols
+    assert "execution_tier" in cols
