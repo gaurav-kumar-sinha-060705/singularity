@@ -200,3 +200,39 @@ CREATE TABLE connections (
   vault credentials (the "how are users created" answer: human OAuth consent → JWT → provision).
 - Verified live: stdout fixture server spawned, list_tools + call_tool round-trip; authed
   `/mcp` call to stripe-mcp unlocks the vault. Docker/WASI binfmt slots in spec (Phase 5).
+
+## Milestone 4.6 — Native MCP OAuth (RFC 9745) via SDK auth provider (✅ DONE)
+
+**Goal:** replace the custom JWT `/mcp` middleware with the MCP SDK's built-in
+`OAuthAuthorizationServerProvider`, so Claude.ai's connector works in "Sign in now"
+mode (auth before any tool call) and users can sign up with email/password at the
+consent page — no pre-seeded accounts needed.
+
+- `app/mcp_oauth.py` — `SingularityOAuthProvider` backed by SQLite tables
+  (`OAuthClient`, `OAuthAuthCode`, `OAuthToken`): PKCE S256 verify, dynamic client
+  registration (public + confidential), refresh-token rotation with single-row
+  `expires_at` = 7-day refresh expiry, short access tokens derived from now in
+  `load_access_token`, client secrets vault-encrypted, revocation + token hints.
+  Crossrefs signing API objects (AuthorizationCode/AccessToken/RefreshToken) with
+  the DB stores; `_iso()` treats naive SQLite UTC as UTC (avoids "code expired"
+  timezone skew).
+- `app/routers/mcp_auth_pages.py` — `/mcp-auth/consent` page: sign-up/sign-in with
+  email + password (reuses `User.set_password`/`check_password`), issues the
+  authorization code on approve; hidden fields html-escaped; session cookie set on
+  the returned response object (FastAPI discards injected `response` cookies when a
+  Response is returned directly).
+- `app/mcp_server.py` — `MCPServer(auth_server_provider=SingularityOAuthProvider(),
+  auth=AuthSettings(issuer_url=..., resource_server_url=.../mcp, ...,
+  required_scopes=["mcp:tools"], ClientRegistrationOptions(default_scopes=...),
+  RevocationOptions(enabled=True)))`; `call_tool` reads user via
+  `get_access_token().subject`. `build_mcp_asgi_app` returns the SDK Starlette
+  directly — OAuth routes (`.well-known/oauth-authorization-server`, `/authorize`,
+  `/token`, `/register`, `/revoke`) and bearer auth middleware are auto-mounted by
+  the SDK; unauthenticated requests get 401 (RequireAuthMiddleware).
+- `app/mcp_auth.py` deleted; `app/main.py` mounts the consent router before `/`.
+- Tests: `tests/test_mcp_oauth.py` (13) + `tests/oauth_helpers.py`
+  (`pkce`, `register_client`, `issue_oauth_access_token`); `tests` env
+  `SINGULARITY_OAUTH_PUBLIC_BASE=https://testserver`; reworked `test_mcp.py` and
+  `test_remote.py` for OAuth-issued tokens (108 passing). Notes: metadata does not
+  advertise `scopes_supported` (SDK omits it); `/api/v1/*` REST still uses JWT auth
+  while `/mcp` uses OAuth tokens.
