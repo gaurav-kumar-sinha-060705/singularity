@@ -182,3 +182,21 @@ CREATE TABLE connections (
   filesystem-mcp) are also callable from cloud clients and claude.ai.
 - Strict container allowlist (official/verified publishers only); no arbitrary registry code.
 - Recommend-anywhere: keep "run locally" as the fallback for unvetted servers.
+
+## Milestone 4.5 — Tier-3 stdio bridge (✓ DONE — spawn + proxy; sandboxing in Phase 5)
+
+**Goal:** execute stdio-only MCPs server-side (the "run-stdio-ourselves" lane claude.ai uses).
+
+- `app/providers/stdio.py` — `StdioMcpProvider` spawns an allowlisted stdio server
+  (`StdioServerParameters`), dials it via `stdio_client`, and proxies tool calls
+  through the same audited `Provider.run(...)` contract; env vars injected from the
+  user's vault credential.
+- Allowlist `ALLOWLISTED_STDIO`: github-stdio (official `@modelcontextprotocol/server-github`)
+  and google-drive-stdio (community Drive server). Registration gated on runtime
+  availability (`shutil.which`), so unprovisioned deploys don't advertise unpullable tools.
+- Seed entries (github-stdio, google-drive-stdio) indexed with execution_tier=local + trust.
+- MCP endpoint auth: `app/mcp_auth.py` + `/mcp` middleware — validates Bearer access token,
+  auto-provisions the users row on first call, publishes user_id for call_tool to resolve
+  vault credentials (the "how are users created" answer: human OAuth consent → JWT → provision).
+- Verified live: stdout fixture server spawned, list_tools + call_tool round-trip; authed
+  `/mcp` call to stripe-mcp unlocks the vault. Docker/WASI binfmt slots in spec (Phase 5).

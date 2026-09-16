@@ -1,6 +1,10 @@
 import json
 
+import pytest
+
+from app.database import SessionLocal
 from app.mcp_server import call_tool, compare_tools, find_solutions, get_trust_report, list_public_tools
+from app.models import User
 
 
 def test_find_solutions_ranks_finance_first():
@@ -121,6 +125,54 @@ def test_list_public_tools_lists_providers():
     assert "weather" in out
     assert "npms_lookup" in out
     assert "call_tool" in out
+
+
+def test_mcp_auth_resolves_user_and_provisions(client, monkeypatch):
+    """A valid Bearer token on /mcp resolves the user and auto-provisions."""
+    email = f"mcp-auth{int(__import__('time').time() * 1000000)}@example.com"
+    tokens = client.post(
+        "/api/v1/auth/signup",
+        json={"email": email, "password": "hunter2hunter"},
+    ).json()
+
+    from app.database import SessionLocal
+    from app.models import User
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == email).first()
+    finally:
+        db.close()
+    assert user is not None
+
+    resp = client.post(
+        "/mcp",
+        json=_rpc("initialize", INITIALIZE),
+        headers={"Accept": "application/json, text/event-stream",
+                 "Authorization": f"Bearer {tokens['access_token']}"},
+    )
+    assert resp.status_code == 200, resp.text
+
+    resp = client.post(
+        "/mcp",
+        json=_rpc("tools/call", {"name": "list_public_tools", "arguments": {}}, id_=2),
+        headers={"Accept": "application/json, text/event-stream",
+                 "Authorization": f"Bearer {tokens['access_token']}"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = _parse_response(resp)
+    text = "".join(c.get("text", "") for c in body["result"]["content"])
+    assert "weather" in text
+
+
+def test_mcp_auth_invalid_token_is_anonymous(client):
+    resp = client.post(
+        "/mcp",
+        json=_rpc("initialize", INITIALIZE),
+        headers={"Accept": "application/json, text/event-stream",
+                 "Authorization": "Bearer not.a.valid.token"},
+    )
+    assert resp.status_code == 200, resp.text
 
 
 def test_call_tool_weather_executes(monkeypatch):

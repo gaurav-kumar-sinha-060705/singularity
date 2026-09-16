@@ -17,6 +17,8 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 
 from app.database import SessionLocal
+from app.mcp_auth import current_user_id as mcp_current_user_id
+from app.mcp_auth import resolve_access_user, reset_user, scope_user
 from app.models import Tool, log_event
 from app.providers import registry
 from app.services.discovery_engine import parse_intent
@@ -263,6 +265,7 @@ def call_tool(
         arguments or {},
         scope=scope,
         channel="mcp",
+        user_id=mcp_current_user_id(),
     )
 
     if out["decision"] == "not_found":
@@ -312,8 +315,12 @@ def build_mcp_asgi_app():
 
     DNS-rebinding protection stays ON; the allowlist comes from settings plus,
     when deployed on Render, the platform-injected external URL.
+
+    Wrapped by an auth-aware middleware: a valid Bearer access token on the
+    request resolves the user (auto-provisioning the row on first use) and
+    publishes user_id on a contextvar consumed by call_tool.
     """
-    return mcp.streamable_http_app(
+    app = mcp.streamable_http_app(
         stateless_http=True,
         json_response=True,
         transport_security=TransportSecuritySettings(
@@ -322,3 +329,20 @@ def build_mcp_asgi_app():
             allowed_origins=["http://localhost:*", "http://127.0.0.1:*", "http://[::1]:*"],
         ),
     )
+
+    async def _auth_middleware(scope, receive, send):
+        if scope["type"] != "http":
+            await app(scope, receive, send)
+            return
+        headers = dict((k.decode("latin-1").lower(), v.decode("latin-1"))
+                       for k, v in scope.get("headers", []))
+        user_id = resolve_access_user(headers.get("authorization"))
+        ctx = scope_user(user_id)
+        try:
+            await app(scope, receive, send)
+        finally:
+            reset_user(ctx)
+
+    # Keep the underlying app's router reachable (main.py lifespan uses it).
+    _auth_middleware.router = getattr(app, "router", None)
+    return _auth_middleware

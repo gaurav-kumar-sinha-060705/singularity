@@ -186,3 +186,48 @@ def test_end_to_end_user_credential_unlocks_remote(client, monkeypatch):
         assert any(h.get("authenticated") is True and h.get("user_id") for h in hits)
     finally:
         db.close()
+
+
+def test_mcp_endpoint_authed_call_tool_uses_vault(client, monkeypatch):
+    """Bearer token on /mcp resolves user -> vault credential -> hosted remote."""
+    _stub_session(monkeypatch)
+    email = f"mcp-e2e{int(__import__('time').time() * 1000000)}@example.com"
+    tokens = client.post("/api/v1/auth/signup",
+                         json={"email": email, "password": "hunter2hunter"}).json()
+    auth = {"Authorization": f"Bearer {tokens['access_token']}",
+            "Accept": "application/json, text/event-stream"}
+
+    conn = client.post("/api/v1/connections",
+                       json={"provider_slug": "stripe-mcp", "credential": {"api_key": "sk_test_abc"}},
+                       headers=auth)
+    assert conn.status_code == 201, conn.text
+
+    def _rpc(method, params, id_):
+        return {"jsonrpc": "2.0", "id": id_, "method": method, "params": params}
+
+    init = client.post("/mcp", json=_rpc("initialize", {
+        "protocolVersion": "2024-11-05", "capabilities": {},
+        "clientInfo": {"name": "pytest", "version": "0.0.1"},
+    }, 1), headers=auth)
+    assert init.status_code == 200, init.text
+
+    resp = client.post("/mcp", json=_rpc("tools/call", {
+        "name": "call_tool",
+        "arguments": {"provider_slug": "stripe-mcp",
+                      "arguments": {"tool": "customers_list", "arguments": {}}},
+    }, 2), headers=auth)
+    assert resp.status_code == 200, resp.text
+
+    def _parse(resp):
+        body = resp.text
+        if body.startswith("data:") or "\ndata:" in body:
+            for line in body.splitlines():
+                if line.startswith("data:"):
+                    return json.loads(line[5:].strip())
+        return resp.json()
+
+    body = _parse(resp)
+    content = body["result"]["content"]
+    text = "".join(c.get("text", "") for c in content)
+    assert "executed through the audited gateway" in text
+    assert "authenticated:** True" in text

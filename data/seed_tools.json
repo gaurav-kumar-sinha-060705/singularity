@@ -303,6 +303,38 @@
       "trust_score": 0.98,
       "execution_tier": "first-party",
       "requires_credential": false
+    },
+    {
+      "slug": "github-stdio",
+      "name": "GitHub (stdio bridge)",
+      "publisher": "Anthropic",
+      "publisher_verified": true,
+      "category": "developer-tools",
+      "description": "Official GitHub reference MCP server, bridged server-side by Singularity and executed through the audited gateway (Tier-3 run-stdio-ourselves). Requires a GitHub personal access token stored in the vault.",
+      "mcp_available": true,
+      "pricing_tier": "free",
+      "integrations": ["github"],
+      "permissions_requested": ["repo:read", "repo:write", "issues:read", "issues:write"],
+      "permissions_needed": ["repo:read", "issues:read"],
+      "trust_score": 0.92,
+      "execution_tier": "local",
+      "requires_credential": true
+    },
+    {
+      "slug": "google-drive-stdio",
+      "name": "Google Drive (stdio bridge)",
+      "publisher": "Singularity",
+      "publisher_verified": true,
+      "category": "files",
+      "description": "Google Drive MCP server bridged server-side by Singularity and executed through the audited gateway (Tier-3 run-stdio-ourselves). Requires Drive OAuth tokens stored in the vault.",
+      "mcp_available": true,
+      "pricing_tier": "free",
+      "integrations": ["google-drive"],
+      "permissions_requested": ["drive:read", "drive:write"],
+      "permissions_needed": ["drive:read"],
+      "trust_score": 0.85,
+      "execution_tier": "local",
+      "requires_credential": true
     }
   ]
 }

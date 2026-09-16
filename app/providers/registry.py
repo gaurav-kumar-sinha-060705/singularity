@@ -1,9 +1,11 @@
 import json
+import shutil
 from pathlib import Path
 
 from app.providers import npms_lookup, pypi_lookup, weather, web_search
 from app.providers.base import Provider
 from app.providers.remote import RemoteMcpProvider
+from app.providers.stdio import ALLOWLISTED_STDIO, StdioMcpProvider
 
 _HOSTED_REMOTES_PATH = Path(__file__).resolve().parents[2] / "data" / "hosted_remotes.json"
 
@@ -43,7 +45,20 @@ _REMOTE_PROVIDERS: dict[str, RemoteMcpProvider] = {
     p.slug: p for p in REMOTE_CATALOG
 }
 
-_ALL = {**_PROVIDERS, **_REMOTE_PROVIDERS}
+
+def _load_stdio_providers() -> dict[str, StdioMcpProvider]:
+    """Tier-3 stdio bridges. Only enabled when the runtime command exists so an
+    unprovisioned deployment doesn't advertise tools it can't actually run."""
+    providers: dict[str, StdioMcpProvider] = {}
+    for spec in ALLOWLISTED_STDIO:
+        if shutil.which(spec["command"]):
+            providers[spec["slug"]] = StdioMcpProvider(spec)
+    return providers
+
+
+_STDIO_PROVIDERS: dict[str, StdioMcpProvider] = _load_stdio_providers()
+
+_ALL = {**_PROVIDERS, **_REMOTE_PROVIDERS, **_STDIO_PROVIDERS}
 
 
 def get_provider(slug: str) -> Provider | None:
@@ -76,4 +91,18 @@ def list_public_tools() -> list[dict]:
         }
         for p in sorted(_REMOTE_PROVIDERS.values(), key=lambda p: p.slug)
     ]
-    return tools + remotes
+    bridges = [
+        {
+            "slug": p.slug,
+            "name": p.name,
+            "version": p.version,
+            "category": p.category,
+            "description": p.description,
+            "scopes": sorted(p.scopes),
+            "hosted": True,
+            "bridge": "stdio",
+            "auth_required": p.requires_auth,
+        }
+        for p in sorted(_STDIO_PROVIDERS.values(), key=lambda p: p.slug)
+    ]
+    return tools + remotes + bridges
