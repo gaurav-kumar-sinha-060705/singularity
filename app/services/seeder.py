@@ -27,6 +27,7 @@ _SEED_ADVISORY_LOCK_KEY = 0x53494E47
 
 COPY_FIELDS = ("name", "publisher", "publisher_verified", "category", "description",
                "mcp_available", "pricing_tier", "source")
+EVOLVING_FIELDS = ("execution_tier", "requires_credential")
 
 
 def _tool_id(slug: str) -> str:
@@ -76,6 +77,9 @@ def _populate(db, tool, entry) -> list[str]:
     """Copy one seed entry onto a Tool row (new or existing), returning flags."""
     flags = scan_tool(entry)
     for field in COPY_FIELDS:
+        if field in entry:
+            setattr(tool, field, entry[field])
+    for field in EVOLVING_FIELDS:
         if field in entry:
             setattr(tool, field, entry[field])
     tool.trust_score = float(entry.get("trust_score", 0.5))
@@ -152,6 +156,35 @@ def seed(recompute_embeddings: bool = True, skip_if_nonempty: bool = False) -> d
         rows = db.scalars(select(Tool)).all()
         flagged = sum(1 for t in rows if t.trust_flags)
         return {"indexed": len(rows), "flagged": flagged}
+    finally:
+        db.close()
+
+
+def backfill_evolving_fields() -> None:
+    """Sync execution_tier / requires_credential from seed file onto all rows.
+
+    Runs after boot migrations so pre-existing rows pick up the new columns'
+    curated values without a full reseed (which would re-log ingest events).
+    """
+    entries = _load_entries()
+    by_slug = {e["slug"]: e for e in entries}
+    db = SessionLocal()
+    try:
+        rows = db.scalars(select(Tool)).all()
+        changed = 0
+        for tool in rows:
+            entry = by_slug.get(tool.slug)
+            if not entry:
+                continue
+            for field in EVOLVING_FIELDS:
+                cur = getattr(tool, field)
+                new = entry.get(field)
+                if new is not None and cur != new:
+                    setattr(tool, field, new)
+                    changed += 1
+        if changed:
+            db.commit()
+            print(f"[singularity] backfilled tier metadata for {changed} field(s)")
     finally:
         db.close()
 

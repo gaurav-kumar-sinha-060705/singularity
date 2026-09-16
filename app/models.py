@@ -45,6 +45,8 @@ class Tool(Base):
     trust_score: Mapped[float] = mapped_column(Float, default=0.5)
     trust_flags_json: Mapped[str | None] = mapped_column("trust_flags", Text)
     source: Mapped[str] = mapped_column(String(30), default="curated")
+    execution_tier: Mapped[str] = mapped_column(String(20), default="unknown")
+    requires_credential: Mapped[bool] = mapped_column(Boolean, default=False)
     embedding_dim: Mapped[int | None] = mapped_column(Integer, nullable=True)
     embedding: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -83,6 +85,8 @@ class Tool(Base):
             "trust_score": self.trust_score,
             "trust_flags": self.trust_flags,
             "source": self.source,
+            "execution_tier": self.execution_tier,
+            "requires_credential": self.requires_credential,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }

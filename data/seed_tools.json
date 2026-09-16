@@ -12,7 +12,9 @@
       "integrations": ["github"],
       "permissions_requested": ["repo:read", "repo:write", "issues:read", "issues:write", "pull_requests:write"],
       "permissions_needed": ["repo:read", "issues:read", "issues:write"],
-      "trust_score": 0.9
+      "trust_score": 0.9,
+      "execution_tier": "local",
+      "requires_credential": true
     },
     {
       "slug": "slack-mcp",
@@ -26,7 +28,9 @@
       "integrations": ["slack"],
       "permissions_requested": ["channels:read", "chat:write", "users:read"],
       "permissions_needed": ["channels:read", "chat:write", "users:read"],
-      "trust_score": 0.92
+      "trust_score": 0.92,
+      "execution_tier": "local",
+      "requires_credential": true
     },
     {
       "slug": "notion-mcp",
@@ -40,7 +44,9 @@
       "integrations": ["notion"],
       "permissions_requested": ["pages:read", "pages:write", "databases:read"],
       "permissions_needed": ["pages:read", "pages:write", "databases:read"],
-      "trust_score": 0.88
+      "trust_score": 0.88,
+      "execution_tier": "hosted",
+      "requires_credential": true
     },
     {
       "slug": "stripe-mcp",
@@ -54,7 +60,9 @@
       "integrations": ["stripe"],
       "permissions_requested": ["charges:read", "customers:read", "payment_links:write"],
       "permissions_needed": ["charges:read", "customers:read"],
-      "trust_score": 0.85
+      "trust_score": 0.85,
+      "execution_tier": "hosted",
+      "requires_credential": true
     },
     {
       "slug": "sentry-mcp",
@@ -68,7 +76,9 @@
       "integrations": ["sentry"],
       "permissions_requested": ["issues:read", "releases:read"],
       "permissions_needed": ["issues:read", "releases:read"],
-      "trust_score": 0.87
+      "trust_score": 0.87,
+      "execution_tier": "local",
+      "requires_credential": true
     },
     {
       "slug": "postgres-mcp",
@@ -82,7 +92,9 @@
       "integrations": ["postgresql"],
       "permissions_requested": ["db:read", "db:write"],
       "permissions_needed": ["db:read"],
-      "trust_score": 0.7
+      "trust_score": 0.7,
+      "execution_tier": "local",
+      "requires_credential": true
     },
     {
       "slug": "filesystem-mcp",
@@ -96,7 +108,9 @@
       "integrations": ["local-filesystem"],
       "permissions_requested": ["fs:read", "fs:write"],
       "permissions_needed": ["fs:read", "fs:write"],
-      "trust_score": 0.91
+      "trust_score": 0.91,
+      "execution_tier": "local",
+      "requires_credential": true
     },
     {
       "slug": "browserbase-mcp",
@@ -110,7 +124,9 @@
       "integrations": ["browserbase"],
       "permissions_requested": ["browser:session", "web:navigate", "screenshot:capture"],
       "permissions_needed": ["browser:session", "web:navigate", "screenshot:capture"],
-      "trust_score": 0.84
+      "trust_score": 0.84,
+      "execution_tier": "local",
+      "requires_credential": true
     },
     {
       "slug": "google-drive-mcp",
@@ -124,7 +140,9 @@
       "integrations": ["google-drive"],
       "permissions_requested": ["drive:read", "drive:write"],
       "permissions_needed": ["drive:read"],
-      "trust_score": 0.86
+      "trust_score": 0.86,
+      "execution_tier": "local",
+      "requires_credential": true
     },
     {
       "slug": "jira-mcp",
@@ -138,7 +156,9 @@
       "integrations": ["jira"],
       "permissions_requested": ["issues:read", "issues:write", "projects:read"],
       "permissions_needed": ["issues:read", "issues:write", "projects:read"],
-      "trust_score": 0.83
+      "trust_score": 0.83,
+      "execution_tier": "local",
+      "requires_credential": true
     },
     {
       "slug": "linear-mcp",
@@ -152,7 +172,9 @@
       "integrations": ["linear"],
       "permissions_requested": ["issues:read", "issues:write"],
       "permissions_needed": ["issues:read", "issues:write"],
-      "trust_score": 0.89
+      "trust_score": 0.89,
+      "execution_tier": "local",
+      "requires_credential": true
     },
     {
       "slug": "expensify-mcp",
@@ -166,7 +188,9 @@
       "integrations": ["expensify"],
       "permissions_requested": ["expenses:read", "expenses:create", "receipts:upload"],
       "permissions_needed": ["expenses:read", "expenses:create", "receipts:upload"],
-      "trust_score": 0.72
+      "trust_score": 0.72,
+      "execution_tier": "local",
+      "requires_credential": true
     },
     {
       "slug": "zapier-mcp",
@@ -180,7 +204,9 @@
       "integrations": ["zapier"],
       "persomissions_requested": ["actions:execute", "zaps:read", "zaps:write"],
       "permissions_needed": ["actions:execute"],
-      "trust_score": 0.8
+      "trust_score": 0.8,
+      "execution_tier": "local",
+      "requires_credential": true
     },
     {
       "slug": "supabase-mcp",
@@ -194,7 +220,9 @@
       "integrations": ["supabase", "postgresql"],
       "permissions_requested": ["db:read", "db:write", "edge_functions:deploy"],
       "permissions_needed": ["db:read"],
-      "trust_score": 0.78
+      "trust_score": 0.78,
+      "execution_tier": "local",
+      "requires_credential": true
     },
     {
       "slug": "quickledger-pro",
@@ -208,7 +236,9 @@
       "integrations": ["quickledger"],
       "permissions_requested": ["expenses:read", "fs:read", "credentials:read", "network:post-external"],
       "permissions_needed": ["expenses:read"],
-      "trust_score": 0.12
+      "trust_score": 0.12,
+      "execution_tier": "local",
+      "requires_credential": true
     },
     {
       "slug": "weather",
@@ -222,7 +252,9 @@
       "integrations": ["open-meteo"],
       "permissions_requested": ["public:read"],
       "permissions_needed": ["public:read"],
-      "trust_score": 0.98
+      "trust_score": 0.98,
+      "execution_tier": "first-party",
+      "requires_credential": false
     },
     {
       "slug": "npms_lookup",
@@ -236,7 +268,9 @@
       "integrations": ["npm", "npms-io"],
       "permissions_requested": ["public:read"],
       "permissions_needed": ["public:read"],
-      "trust_score": 0.98
+      "trust_score": 0.98,
+      "execution_tier": "first-party",
+      "requires_credential": false
     },
     {
       "slug": "pypi_lookup",
@@ -250,7 +284,9 @@
       "integrations": ["pypi"],
       "permissions_requested": ["public:read"],
       "permissions_needed": ["public:read"],
-      "trust_score": 0.98
+      "trust_score": 0.98,
+      "execution_tier": "first-party",
+      "requires_credential": false
     },
     {
       "slug": "web_search",
@@ -264,7 +300,9 @@
       "integrations": ["duckduckgo"],
       "permissions_requested": ["public:read"],
       "permissions_needed": ["public:read"],
-      "trust_score": 0.98
+      "trust_score": 0.98,
+      "execution_tier": "first-party",
+      "requires_credential": false
     }
   ]
 }
