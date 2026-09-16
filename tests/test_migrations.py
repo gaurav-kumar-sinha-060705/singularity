@@ -61,6 +61,42 @@ def test_sqlite_branch_still_works():
         assert _columns(db, "tools") == {"id", "slug"}
 
 
+def test_postgres_boolean_default_uses_false(monkeypatch):
+    """Regression: ALTER on Postgres must use `DEFAULT false`, not `DEFAULT 0`
+    (PG rejects boolean DEFAULT 0 with DatatypeMismatch).
+    """
+    executed = []
+
+    class _PgDialect:
+        name = "postgresql"
+
+    class _PgEngine:
+        dialect = _PgDialect()
+
+    class _PgSession:
+        def get_bind(self):
+            return _PgEngine()
+
+        def execute(self, stmt):
+            executed.append(str(stmt))
+            return None
+
+        def commit(self):
+            pass
+
+    inspector = _fake_inspector(["id", "slug", "name"])  # missing the two cols
+    inspector.get_table_names = lambda: ["tools", "oauth_clients", "oauth_auth_codes", "oauth_tokens"]
+
+    def fake_inspect(bind):
+        return inspector
+
+    monkeypatch.setattr("app.migrations.inspect", fake_inspect)
+    run_migrations(_PgSession())
+    alts = [e for e in executed if e.startswith("ALTER")]
+    assert any("requires_credential" in e and "DEFAULT 0" in e for e in alts) is False
+    assert any("requires_credential BOOLEAN NOT NULL DEFAULT false" in e for e in alts)
+
+
 def test_run_migration_adds_columns_on_missing_drifted_schema():
     """End-to-end: run() ALTERs requires_credential + execution_tier when the
     tools table is missing them (simulates production Postgres schema drift

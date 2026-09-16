@@ -30,11 +30,7 @@ def _columns(db, table: str) -> set[str]:
 
 
 def _add_column(db, table: str, column: str, dtype: str) -> None:
-    dialect = _dialect(db.get_bind())
-    if dialect == "sqlite":
-        db.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {dtype}"))
-    else:
-        db.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {dtype}"))
+    db.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {dtype}"))
     db.commit()
     print(f"[singularity] migration: added {table}.{column} ({dtype})")
 
@@ -59,13 +55,12 @@ def run(db: Session) -> None:
         print(f"[singularity] migration: cannot inspect tools table — {exc}")
         return
 
+    dialect = _dialect(db.get_bind())
     migrations = [
-        ("tools", "requires_credential", "BOOLEAN NOT NULL DEFAULT 0",
-         "requires_credential BOOLEAN NOT NULL DEFAULT 0"),
-        ("tools", "execution_tier", "VARCHAR(20) NOT NULL DEFAULT 'unknown'",
-         "execution_tier VARCHAR(20) NOT NULL DEFAULT 'unknown'"),
+        ("tools", "requires_credential", "BOOLEAN NOT NULL DEFAULT false" if dialect == "postgresql" else "BOOLEAN NOT NULL DEFAULT 0"),
+        ("tools", "execution_tier", "VARCHAR(20) NOT NULL DEFAULT 'unknown'"),
     ]
 
-    for table, col, dtype, _full_def in migrations:
+    for table, col, dtype in migrations:
         if col not in tool_cols:
             _add_column(db, table, col, dtype)
