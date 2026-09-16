@@ -25,7 +25,7 @@ def _columns(db, table: str) -> set[str]:
     if _dialect(db.get_bind()) == "sqlite":
         cols = {row[1] for row in db.execute(text(f"PRAGMA table_info({table})")).all()}
     else:
-        cols = {r.column_name for r in inspect(db.get_bind()).get_columns(table)}
+        cols = {r["name"] for r in inspect(db.get_bind()).get_columns(table)}
     return cols
 
 
@@ -55,7 +55,8 @@ def run(db: Session) -> None:
 
     try:
         tool_cols = _columns(db, "tools")
-    except Exception:
+    except Exception as exc:
+        print(f"[singularity] migration: cannot inspect tools table — {exc}")
         return
 
     migrations = [
