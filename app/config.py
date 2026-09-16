@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     auth_signup_per_min: int = 5
     auth_signin_per_min: int = 10
 
+    # OAuth redirect base (must be reachable by the browser during the flow).
+    oauth_public_base: str = "http://localhost:8000"
+
 
 @lru_cache
 def get_settings() -> Settings:

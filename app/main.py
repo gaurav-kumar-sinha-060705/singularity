@@ -9,7 +9,7 @@ from app.database import Base, SessionLocal, engine
 from app.mcp_server import build_mcp_asgi_app
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.migrations import run as run_migrations
-from app.routers import auth, connections, execute, recommend
+from app.routers import auth, connections, execute, oauth, recommend
 from app.services.embeddings import get_model
 from app.services.recommendation_index import index
 from app.services.seeder import backfill_evolving_fields, seed_if_empty
@@ -55,6 +55,7 @@ def create_app() -> FastAPI:
     app.include_router(execute.router, prefix=settings.api_v1_prefix)
     app.include_router(auth.router, prefix=settings.api_v1_prefix)
     app.include_router(connections.router, prefix=settings.api_v1_prefix)
+    app.include_router(oauth.router, prefix=settings.api_v1_prefix)
 
     @app.get("/health")
     def health():

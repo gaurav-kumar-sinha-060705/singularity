@@ -1,25 +1,33 @@
+import json
+from pathlib import Path
+
 from app.providers import npms_lookup, pypi_lookup, weather, web_search
 from app.providers.base import Provider
 from app.providers.remote import RemoteMcpProvider
 
-# Tier 2 — vetted hosted MCP remotes (streamable-http) that this gateway can
-# proxy as an MCP client. Each entry is curated at seed time (allowlist + vet):
-# never derived from user input. auth_required=True until Phase 4.5 provides a
-# credential vault, so listing is advisory and execute() refuses with a reason.
-REMOTE_CATALOG: list[RemoteMcpProvider] = [
-    RemoteMcpProvider(
-        slug="stripe-mcp",
-        name="Stripe (hosted MCP)",
-        remote_url="https://mcp.stripe.com",
-        description=(
-            "Stripe's official hosted MCP server: look up charges, customers, "
-            "and payment links. Proxied by Singularity as an MCP client. "
-            "Requires a Stripe credential (Phase 4.5 vault)."
-        ),
-        category="finance",
-        auth_required=True,
-    ),
-]
+_HOSTED_REMOTES_PATH = Path(__file__).resolve().parents[2] / "data" / "hosted_remotes.json"
+
+
+def _load_remote_catalog() -> list[RemoteMcpProvider]:
+    """Load curated hosted remotes from data/hosted_remotes.json at boot."""
+    if not _HOSTED_REMOTES_PATH.exists():
+        return []
+    data = json.loads(_HOSTED_REMOTES_PATH.read_text(encoding="utf-8"))
+    providers = []
+    for entry in data.values():
+        providers.append(RemoteMcpProvider(
+            slug=entry["slug"],
+            name=entry.get("server_name", entry["slug"]),
+            remote_url=entry["remote_url"],
+            description=entry.get("server_description", ""),
+            category="hosted",
+            auth_required=entry.get("auth_required", True),
+        ))
+    return providers
+
+
+# Tier 2 — vetted hosted MCP remotes (streamable-http) loaded from curated asset.
+REMOTE_CATALOG: list[RemoteMcpProvider] = _load_remote_catalog()
 
 _PROVIDERS: dict[str, Provider] = {
     p.slug: p

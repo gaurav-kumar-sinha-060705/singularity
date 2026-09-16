@@ -135,4 +135,4 @@ def test_all_providers_registered():
 
 
 def test_unregistered_provider_none():
-    assert registry.get_provider("github-mcp") is None
+    assert registry.get_provider("totally-unregistered-mcp") is None

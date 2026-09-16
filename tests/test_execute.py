@@ -55,7 +55,7 @@ def test_execute_weather_ok(client, monkeypatch):
 
 def test_execute_unknown_provider(client):
     resp = client.post("/api/v1/execute", json={
-        "provider_slug": "github-mcp",
+        "provider_slug": "totally-unregistered-mcp",
         "arguments": {},
     })
     assert resp.status_code == 404

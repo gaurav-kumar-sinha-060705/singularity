@@ -66,11 +66,13 @@ Singularity, for Claude.ai, for every hosted client. Execution is therefore tier
 |---|---|---|---|
 | **1 — Keyless APIs** | Free public REST APIs wrapped as first-party providers (weather, npm, PyPI, web search) | ✅ HTTP | none |
 | **2 — Hosted MCP remotes** | Vetted, hosted `streamable-http`/SSE MCP servers we proxy as an **MCP client** (Stripe, Notion, Smithery-hosted, Pipeworx-hosted…) | ✅ HTTP | user API key/OAuth (Phase 4 vault) |
-| **3 — Local stdio** | stdio-only servers (the long tail: most of the registry) | ❌ not reachable | user connects locally |
-| — **Run-stdio-ourselves** | Singularity containers the server (Smithery/Glama-style) | future infra decision | — |
+| **3 — Local stdio** | stdio-only servers (the long tail: most of the registry) | ❌ not reachable in registry form | user connects locally |
+| — **Run-stdio-ourselves** | Singularity containers the server server-side (Smithery/Glama-style) and gates it with the user's vault credential via OAuth — **how claude.ai web serves Drive/GitHub/Slack** (Anthropic runs the stdio server server-side; that is why the registry's `stdio` entries are still usable from web clients) | ✅ when adopted | user OAuth (Phase 4 vault) |
 
 Every executable surface advertises a `hosted_variant` (remote URL) when one exists;
-stdio-only tools remain **recommend + vet + user-connects-locally**.
+stdio-only tools remain **recommend + vet + user-connects-locally** until the
+`Run-stdio-ourselves` lane is built (Phase 5 follow-up; strict container + publisher
+allowlist so arbitrary registry code never executes).
 
 ---
 
@@ -85,6 +87,7 @@ stdio-only tools remain **recommend + vet + user-connects-locally**.
 | 2c | Registry published under `io.github.gaurav-kumar-sinha-060705/singularity` | ✅ |
 | 2d | Distribution verified across all channels: official registry active, Smithery/Arcade live, Glama claimed + healthy, GitHub public with discovery topics | ✅ |
 | 3 | Execution gateway: provider framework + 4 keyless providers, `POST /api/v1/execute`, scope+trust+audit enforcer, MCP `call_tool`/`list_public_tools`, seeder sync-missing → `indexed_tools: 19` | ✅ |
+| 4a | Tier-2 hosted MCP adapter (`RemoteMcpProvider`, SSRF allowlist) + OAuth framework (5 providers), user auth + encrypted credential vault, credential-injected execution; tier metadata on tools (`execution_tier`, `requires_credential`) | ✅ |
 
 ---
 
@@ -176,9 +179,13 @@ All calls audited with user_id + connection_id.
   each candidate's `remotes[]`/hosted-variant so the executable (Tier 2) set grows
   automatically as servers publish HTTP endpoints
 - Index past 200+ vetted tools; recommend hosted variants for the long stdio tail
-- (Decision deferred) **Run-stdio-ourselves**: containerize stdio servers
-  (Smithery/Glama-style) to make the entire catalog executable — infra + security
-  cost vs. value; revisit once credentials + vault + Tier-2 demand are proven
+- **Run-stdio-ourselves (Tier 3, now prioritized by user archetype):** containerize vetted
+  stdio servers server-side (the reason claude.ai web serves Drive/GitHub/Slack despite the
+  registry listing them as `stdio` — Anthropic runs the stdio server server-side and gates it
+  with OAuth). Singularity does the same: sandboxed container per vetted server, proxied over
+  HTTP, gated with the user's vault credential. Strict container + official-publisher
+  allowlist; arbitrary registry code never executes. This makes the *entire* catalog
+  callable from cloud clients (incl. claude.ai), not just Tier-2 remotes with HTTP links.
 - Enterprise dashboard/billing (API keys, usage analytics)
 
 ---

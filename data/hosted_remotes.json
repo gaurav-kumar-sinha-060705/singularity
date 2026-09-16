@@ -1,0 +1,38 @@
+{
+  "stripe-mcp": {
+    "slug": "stripe-mcp",
+    "remote_url": "https://mcp.stripe.com",
+    "host": "mcp.stripe.com",
+    "server_name": "Stripe MCP (official)",
+    "server_description": "Stripe's official hosted MCP server. Requires a Stripe API key.",
+    "auth_required": true,
+    "tier": "hosted"
+  },
+  "notion-mcp": {
+    "slug": "notion-mcp",
+    "remote_url": "https://mcp.notion.com/mcp",
+    "host": "mcp.notion.com",
+    "server_name": "Notion MCP (official)",
+    "server_description": "Notion's official hosted MCP server. Requires Notion API key.",
+    "auth_required": true,
+    "tier": "hosted"
+  },
+  "github-mcp": {
+    "slug": "github-mcp",
+    "remote_url": "https://server.smithery.ai/@smithery-ai/github-mcp",
+    "host": "server.smithery.ai",
+    "server_name": "GitHub MCP via Smithery",
+    "server_description": "GitHub MCP server hosted on Smithery. Requires GitHub token.",
+    "auth_required": true,
+    "tier": "hosted"
+  },
+  "slack-mcp": {
+    "slug": "slack-mcp",
+    "remote_url": "https://waystation.ai/slack/mcp",
+    "host": "waystation.ai",
+    "server_name": "Slack MCP via WayStation",
+    "server_description": "Slack MCP server hosted on WayStation. Requires Slack OAuth token.",
+    "auth_required": true,
+    "tier": "hosted"
+  }
+}

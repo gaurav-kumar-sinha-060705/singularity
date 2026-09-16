@@ -11,6 +11,16 @@ local processes — unreachable from the cloud. Three-tier model:
 - Tier 2 (THIS PHASE): proxy vetted hosted `streamable-http` remotes as an MCP client.
 - Tier 3: stdio-only servers = recommend + user connects locally (never executed remotely).
 
+**Tier 3 revision (user-identified):** the official registry lists nearly every MCP as
+`stdio` — but claude.ai (web) *does* offer Drive/GitHub/Slack etc. because Anthropic runs
+the stdio server *server-side* themselves and gates it via OAuth. That is exactly what
+Smithery/Glama/WayStation/mcp.run do. Implication: **we CAN offer every officially-registered
+MCP — with or without a streamable-http link — by running the vetted stdio server in a
+sandboxed container server-side and proxying it over HTTP with the user's vault credential.**
+This is the deferred ROADMAP §7 lane (run-stdio-ourselves); the acceptance for THIS phase
+is Tier-2 proxying, and Tier-3 "run stdio ourselves" is scoped as a follow-up milestone
+(Phase 5) with a strict container allowlist.
+
 **Key architectural constraint (user-identified):** To store credentials for hosted remotes,
 we need **user accounts first**. The correct build order:
 1. User auth (signup/signin) → foundational for credential storage
@@ -27,7 +37,7 @@ we need **user accounts first**. The correct build order:
 - `scripts/enrich_remotes.py` — enrichment script to curate hosted remotes from registry.
 - 59 pytest green; live smoke: list_public_tools works, call_tool refuses with auth reason.
 
-## Milestone 4.1 — User Authentication (BUILD NOW)
+## Milestone 4.1 — User Authentication (✅ DONE)
 
 **Goal:** Enable users to create accounts and sign in, so we can store their credentials.
 
@@ -59,7 +69,7 @@ CREATE TABLE users (
 - `data/singularity.db` — users table auto-created via `create_all`
 - `tests/test_auth.py` — signup, signin, token expiry, invalid credentials
 
-## Milestone 4.2 — Credential Vault (BUILD AFTER 4.1)
+## Milestone 4.2 — Credential Vault (✓ DONE)
 
 **Goal:** Store user's API keys/OAuth tokens for hosted remotes, encrypted at rest.
 
@@ -91,7 +101,7 @@ CREATE TABLE connections (
 - `app/routers/connections.py` — CRUD endpoints
 - `tests/test_vault.py` — encrypt/decrypt, connection CRUD
 
-## Milestone 4.3 — OAuth Flows (BUILD AFTER 4.2)
+## Milestone 4.3 — OAuth Flows (✓ DONE — framework; providers enable via env creds)
 
 **Goal:** One-click connect for Stripe, GitHub, Notion, etc.
 
@@ -114,7 +124,7 @@ CREATE TABLE connections (
 - `app/services/oauth_providers.py` — provider-specific configs (client IDs, scopes, endpoints)
 - `tests/test_oauth.py` — mock OAuth flows
 
-## Milestone 4.4 — Remote Providers Use Credentials (BUILD AFTER 4.3)
+## Milestone 4.4 — Remote Providers Use Credentials (✓ DONE — API-key path)
 
 **Goal:** `RemoteMcpProvider` fetches user's stored credential and passes it to hosted MCP.
 
@@ -158,9 +168,17 @@ CREATE TABLE connections (
 
 ## Acceptance (Phase 4 complete)
 
-- User can sign up / sign in / view profile
-- User can store API key for a provider (encrypted at rest)
-- User can connect Stripe via OAuth (one-click)
-- `call_tool("stripe-mcp")` uses user's stored credential → executes successfully
-- User without connection → clear error "connect your Stripe account"
-- 65+ pytest green; live smoke on Render after deploy
+- User can sign up / sign in / view profile ✓ (79 tests green)
+- User can store API key for a provider (encrypted at rest) ✓
+- User can connect via OAuth framework across 5 providers (enabled by env client IDs) ✓
+- `call_tool("stripe-mcp")` uses user's stored credential → executes successfully ✓ (integration test)
+- User without connection → clear error "connect your Stripe account" ✓
+- 87 pytest green; live smoke on Render after deploy
+
+## Remaining (Phase 5 follow-up, Per user's Tier-3 insight)
+
+- Run vetted stdio servers **ourselves** in sandboxed containers, proxied over HTTP with
+  vault credentials — so MCPs without any streamable-http link (e.g. google-drive-mcp,
+  filesystem-mcp) are also callable from cloud clients and claude.ai.
+- Strict container allowlist (official/verified publishers only); no arbitrary registry code.
+- Recommend-anywhere: keep "run locally" as the fallback for unvetted servers.

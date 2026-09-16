@@ -131,7 +131,7 @@ def test_call_tool_weather_executes(monkeypatch):
 
 
 def test_call_tool_unknown_provider():
-    out = call_tool("github-mcp", {})
+    out = call_tool("totally-unregistered-mcp", {})
     assert "Could not execute" in out
     assert "no gateway provider" in out
 
