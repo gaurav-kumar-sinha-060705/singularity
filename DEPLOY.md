@@ -47,9 +47,15 @@ Replace `XXXX` in `server.json` and `smithery.yaml` with your actual Render app 
 
 ```powershell
 $u = "https://singularity-xxxx.onrender.com"
-Invoke-RestMethod "$u/health"                                   # expect status ok, indexed_tools 15
+Invoke-RestMethod "$u/health"                                   # expect status ok, indexed_tools 19+
+Invoke-RestMethod "$u/.well-known/oauth-authorization-server"   # expect issuer = your Render URL
 powershell -ExecutionPolicy Bypass -File scripts\smoke_mcp.ps1 -BaseUrl $u
 ```
+
+The smoke script runs a full MCP handshake against the public URL. The OAuth issuer
+base auto-derives from `RENDER_EXTERNAL_URL` (no env var needed). If you want to
+override it (e.g., custom domain), set `SINGULARITY_OAUTH_PUBLIC_BASE` in the
+Render dashboard.
 
 The smoke script runs a full MCP handshake against the public URL. If it passes,
 connect your editor:

@@ -1,5 +1,7 @@
+import os
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -50,7 +52,16 @@ class Settings(BaseSettings):
     auth_signin_per_min: int = 10
 
     # OAuth redirect base (must be reachable by the browser during the flow).
+    # On Render: auto-derives from RENDER_EXTERNAL_URL when not set explicitly.
     oauth_public_base: str = "http://localhost:8000"
+
+    @model_validator(mode="after")
+    def _derive_oauth_base_from_render(self) -> "Settings":
+        if self.oauth_public_base == "http://localhost:8000":
+            render_url = os.environ.get("RENDER_EXTERNAL_URL", "").strip()
+            if render_url:
+                self.oauth_public_base = render_url
+        return self
 
 
 @lru_cache
