@@ -57,7 +57,7 @@ class WeatherProvider(Provider):
             raise ProviderError("units must be 'celsius' or 'fahrenheit'")
         return {"location": location, "units": units}
 
-    def execute(self, args: dict) -> dict:
+    def execute(self, args: dict, credential: dict | None = None) -> dict:
         geo = http_get_json(GEOCODE_URL, {
             "name": args["location"], "count": 1,
             "language": "en", "format": "json",

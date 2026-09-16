@@ -2,7 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.audit import extract_audit_context
+from app.auth import get_optional_user
 from app.database import get_db
+from app.models import User
 from app.schemas import ExecuteRequest, ExecuteResponse
 from app.services.gateway import execute_via_gateway
 
@@ -10,7 +12,8 @@ router = APIRouter()
 
 
 @router.post("/execute", response_model=ExecuteResponse)
-def execute(payload: ExecuteRequest, request: Request, db: Session = Depends(get_db)):
+def execute(payload: ExecuteRequest, request: Request, db: Session = Depends(get_db),
+            user: User | None = Depends(get_optional_user)):
     audit = extract_audit_context(request)
     out = execute_via_gateway(
         payload.provider_slug,
@@ -19,6 +22,7 @@ def execute(payload: ExecuteRequest, request: Request, db: Session = Depends(get
         channel=audit["channel"],
         db=db,
         ip_hash=audit["ip_hash"],
+        user_id=user.id if user else None,
     )
 
     if out["decision"] == "not_found":

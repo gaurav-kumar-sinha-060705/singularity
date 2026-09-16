@@ -25,7 +25,7 @@ class PypiLookupProvider(Provider):
             raise ProviderError("package name is too long")
         return {"package": package}
 
-    def execute(self, args: dict) -> dict:
+    def execute(self, args: dict, credential: dict | None = None) -> dict:
         body = http_get_json(PYPI_URL.format(quote(args["package"])))
         info = body.get("info") or {}
         releases = body.get("releases") or {}

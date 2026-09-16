@@ -25,7 +25,7 @@ class NpmsLookupProvider(Provider):
             raise ProviderError("package name is too long")
         return {"package": package}
 
-    def execute(self, args: dict) -> dict:
+    def execute(self, args: dict, credential: dict | None = None) -> dict:
         body = http_get_json(NPM_URL.format(quote(args["package"])))
         collected = body.get("collected") or {}
         metadata = collected.get("metadata") or {}

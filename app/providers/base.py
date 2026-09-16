@@ -34,18 +34,21 @@ class Provider:
     def validate(self, args: dict) -> dict:
         return args
 
-    def execute(self, args: dict) -> dict:
+    def execute(self, args: dict, credential: dict | None = None) -> dict:
         raise NotImplementedError
 
-    def run(self, args: dict, scope: str) -> dict:
+    def run(self, args: dict, scope: str, credential: dict | None = None) -> dict:
         """Gate + run one call. Never raises; downstream failures become
-        {"ok": False, "error": ...} outcomes so the gateway can audit them."""
+        {"ok": False, "error": ...} outcomes so the gateway can audit them.
+
+        `credential` is the decrypted per-user secret (None for Tier-1 keyless
+        providers / unauthenticated calls)."""
         t0 = time.monotonic()
         try:
             if scope not in self.scopes:
                 raise ProviderError(f"scope '{scope}' is not granted to '{self.slug}'")
             validated = self.validate(args)
-            result = self.execute(validated)
+            result = self.execute(validated, credential)
             return {
                 "ok": True,
                 "name": self.slug,

@@ -1,8 +1,10 @@
 import hashlib
 import json
 import os
+import uuid
 from datetime import datetime, timezone
 
+import bcrypt
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -103,3 +105,47 @@ class AuditLog(Base):
 
 def log_event(db, event: str, tool_id: str | None = None, **detail) -> None:
     db.add(AuditLog(tool_id=tool_id, event=event, detail_json=json.dumps(detail)))
+
+
+def _user_id(email: str) -> str:
+    """Stable ID from email."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"singularity:user:{email.lower().strip()}"))
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    def set_password(self, password: str) -> None:
+        self.password_hash = bcrypt.hashpw(
+            password.encode("utf-8"), bcrypt.gensalt(rounds=12)
+        ).decode("utf-8")
+
+    def check_password(self, password: str) -> bool:
+        return bcrypt.checkpw(
+            password.encode("utf-8"), self.password_hash.encode("utf-8")
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "email": self.email,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+class Connection(Base):
+    __tablename__ = "connections"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True)
+    provider_slug: Mapped[str] = mapped_column(String(120), index=True)
+    credential_json: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    user = relationship("User")

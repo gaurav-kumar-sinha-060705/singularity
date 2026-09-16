@@ -24,20 +24,25 @@ from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 
 from mcp import ClientSession
-from mcp.client.streamable_http import streamable_http_client
+from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
 
 from app.config import get_settings
 from app.providers.base import Provider, ProviderError
 
 
 @asynccontextmanager
-async def open_session(remote_url: str):
+async def open_session(remote_url: str, headers: dict[str, str] | None = None):
     """Async context manager yielding a connected MCP ClientSession.
 
     Tests stub this to avoid network I/O; production wires it to the real
-    streamable-http transport.
+    streamable-http transport. `headers` carries a user's credential (Phase 4).
     """
-    async with streamable_http_client(remote_url) as (read_stream, write_stream):
+    settings = get_settings()
+    client = create_mcp_http_client(
+        headers=headers or None,
+        timeout=settings.remote_mcp_timeout,
+    )
+    async with streamable_http_client(remote_url, http_client=client) as (read_stream, write_stream):
         async with ClientSession(read_stream, write_stream) as session:
             yield session
 
@@ -88,8 +93,25 @@ class RemoteMcpProvider(Provider):
 
     # -- remote session helpers ------------------------------------------
 
-    async def _async_list_tools(self) -> list:
-        async with open_session(self.remote_url) as session:
+    @staticmethod
+    def _auth_headers(credential: dict | None) -> dict[str, str] | None:
+        """Map a stored credential to HTTP headers.
+
+        Supports an explicit {"headers": {...}} form, or a bearer token from
+        access_token/api_key/token.
+        """
+        if not credential:
+            return None
+        explicit = credential.get("headers")
+        if isinstance(explicit, dict) and explicit:
+            return {str(k): str(v) for k, v in explicit.items()}
+        token = credential.get("access_token") or credential.get("api_key") or credential.get("token")
+        if token:
+            return {"Authorization": f"Bearer {token}"}
+        return None
+
+    async def _async_list_tools(self, headers: dict[str, str] | None = None) -> list:
+        async with open_session(self.remote_url, headers=headers) as session:
             await session.initialize()
             res = await session.list_tools()
             return [
@@ -97,8 +119,9 @@ class RemoteMcpProvider(Provider):
                 for t in getattr(res, "tools", [])
             ]
 
-    async def _async_call_tool(self, tool: str, tool_args: dict) -> dict:
-        async with open_session(self.remote_url) as session:
+    async def _async_call_tool(self, tool: str, tool_args: dict,
+                               headers: dict[str, str] | None = None) -> dict:
+        async with open_session(self.remote_url, headers=headers) as session:
             await session.initialize()
             result = await session.call_tool(tool, tool_args)
         content = getattr(result, "content", None)
@@ -139,11 +162,12 @@ class RemoteMcpProvider(Provider):
         except Exception:
             return cache[1]
 
-    def execute(self, args: dict) -> dict:
-        if self.auth_required:
+    def execute(self, args: dict, credential: dict | None = None) -> dict:
+        headers = self._auth_headers(credential)
+        if self.auth_required and not headers:
             raise ProviderError(
-                "hosted remote execution requires a credential connection "
-                "(Phase 4.5 OAuth/credential vault — not built yet)"
+                "no credential connected for this provider — connect an "
+                "account (or store an API key) before executing"
             )
         settings = get_settings()
         tool = args["tool"]
@@ -151,7 +175,7 @@ class RemoteMcpProvider(Provider):
         try:
             result = asyncio.run(
                 asyncio.wait_for(
-                    self._async_call_tool(tool, tool_args),
+                    self._async_call_tool(tool, tool_args, headers=headers),
                     timeout=settings.remote_mcp_timeout,
                 )
             )
@@ -160,6 +184,7 @@ class RemoteMcpProvider(Provider):
         return {
             "remote_url": self.remote_url,
             "tool": tool,
+            "authenticated": bool(headers),
             "source": self.name,
             **result,
         }

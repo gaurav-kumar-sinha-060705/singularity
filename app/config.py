@@ -43,6 +43,12 @@ class Settings(BaseSettings):
         "mcp.mcparmory.com,slacking.biz,nexgendata-mcp-proxy.steve-corbett.com"
     )
 
+    # Auth + credential vault
+    jwt_secret: str = "singularity-dev-jwt-secret-change-me"
+    vault_key: str = ""  # Fernet key; generated at boot if empty (dev/local)
+    auth_signup_per_min: int = 5
+    auth_signin_per_min: int = 10
+
 
 @lru_cache
 def get_settings() -> Settings:

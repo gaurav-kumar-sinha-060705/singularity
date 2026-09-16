@@ -140,33 +140,32 @@ stdio-only tools remain **recommend + vet + user-connects-locally**.
 
 ---
 
-## 6. Phase 4 — Hosted MCP Execution + One-Click OAuth
+## 6. Phase 4 — Hosted MCP Execution (Tier 2) + User Auth + OAuth
 
-Two workstreams. This is where Singularity becomes an **MCP client** (Tier 2).
+**Architecture constraint:** To store credentials for hosted remotes, we need user accounts first.
+Build order: users → vault → OAuth → remote providers.
 
-### 6A. Remote MCP adapter (Tier 2 — proxy hosted `streamable-http` remotes)
+### 6.1 User Authentication (build now)
 
-- New `RemoteMcpProvider` — a provider backed by a hosted MCP server URL,
-  discovered from the registry listing's `remotes[]` (`type: streamable-http`).
-- Connect via the `mcp` SDK client stack: `streamable_http_client(url, http_client=…)`
-  + `ClientSession` (`initialize` → `list_tools()` → `call_tool()`).
-- Same gateway contract as Tier 1: scope + trust + audit enforcer; a call to a remote
-  tool surfaces as one `call_tool(provider_slug=…, arguments=…)` exactly like Tier 1.
-- Enumerate the **executable set across our curated catalog**: which of the 15 indexed
-  third-party tools have a hosted variant (official vs Smithery/McParMory/Pipeworx/WayStation
-  hosted proxies) → seed `hosted_variant.url` + `is_executable`.
-- **Safety guards (non-negotiable):**
-  - Allowlist of hostnames (pre-verified at seed time) — no arbitrary user-supplied URLs (SSRF).
-  - Per-remote installed tools must pass the same vetting; `executable` only after scan.
-  - Timeouts + no redirect-follow to internal addresses; audit on every remote call.
+Signup/signin with JWT tokens. Users table, bcrypt passwords, 15-min access + 7-day refresh.
+Protected routes via `get_current_user` dependency.
 
-### 6B. Credential vault + One-Click OAuth
+### 6.2 Credential Vault
 
-Slack, GitHub, Gmail, Google Calendar, **Stripe** — one-click connect like Zapier.
-Capability tokens (short-TTL, scoped) issued per connection. Gateway enforces scope on
-every call. OAuth lets hosted remotes work **without us storing raw API keys** (auth
-travels as HTTP headers/OAuth, which a hosted gateway can carry — the thing stdio
-cannot do).
+Fernet-encrypted credential storage per user + per provider. `connections` table.
+User stores API keys or OAuth tokens; vault encrypts at rest with `SINGULARITY_VAULT_KEY`.
+
+### 6.3 OAuth Flows (one-click connect)
+
+Stripe, GitHub, Notion, Slack, Google — OAuth2 PKCE flows. User authorizes, Singularity
+exchanges code for access token, encrypts + stores in vault. Remote providers use stored
+credentials when calling hosted MCP servers.
+
+### 6.4 Remote Providers Use Credentials
+
+`RemoteMcpProvider` fetches user's stored credential from vault, passes it as HTTP header
+to `streamable_http_client`. User without connection → "connect your Stripe account" error.
+All calls audited with user_id + connection_id.
 
 ---
 

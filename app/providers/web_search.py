@@ -39,7 +39,7 @@ class WebSearchProvider(Provider):
                     "snippet": text,
                 })
 
-    def execute(self, args: dict) -> dict:
+    def execute(self, args: dict, credential: dict | None = None) -> dict:
         body = http_get_json(DDG_URL, {
             "q": args["query"], "format": "json",
             "no_html": 1, "skip_disambig": 1,

@@ -59,3 +59,37 @@ class ExecuteResponse(BaseModel):
     result: Any | None = None
     error: str | None = None
     latency_ms: int
+
+
+class SignupRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=8, max_length=200)
+
+
+class SigninRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=1, max_length=200)
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
+class UserOut(BaseModel):
+    id: str
+    email: str
+    created_at: str
+
+
+class ConnectionIn(BaseModel):
+    provider_slug: str = Field(min_length=1, max_length=120)
+    credential: dict[str, Any] = Field(min_length=1)
+
+
+class ConnectionOut(BaseModel):
+    id: str
+    provider_slug: str
+    created_at: str
+    updated_at: str
