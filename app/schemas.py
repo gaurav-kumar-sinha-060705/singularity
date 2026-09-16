@@ -42,3 +42,20 @@ class RecommendResponse(BaseModel):
     intent: IntentOut
     recommendations: list[RecommendationItem]
     message: str | None = None
+
+
+class ExecuteRequest(BaseModel):
+    provider_slug: str = Field(min_length=1, max_length=120)
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    scope: str | None = Field(default=None, max_length=40)
+
+
+class ExecuteResponse(BaseModel):
+    provider: str
+    version: str
+    scope: str
+    audited: bool = True
+    ok: bool
+    result: Any | None = None
+    error: str | None = None
+    latency_ms: int

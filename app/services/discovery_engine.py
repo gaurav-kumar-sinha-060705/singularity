@@ -14,6 +14,7 @@ CATEGORY_KEYWORDS: dict[str, list[str]] = {
     "developer-tools": [
         "code", "coding", "repository", "repo", "git", "pull request", "issue tracker",
         "ci/cd", "deploy", "sdk", "api integration", "developer",
+        "package", "npm", "pypi", "dependency", "library",
     ],
     "databases": [
         "database", "sql", "postgres", "mysql", "backend as a service", "data warehouse",
@@ -31,6 +32,14 @@ CATEGORY_KEYWORDS: dict[str, list[str]] = {
     "monitoring": [
         "monitoring", "errors", "error tracking", "crash", "logs", "observability",
         "uptime", "alerts", "metrics",
+    ],
+    "weather": [
+        "weather", "forecast", "temperature", "rain", "rainy", "snow", "sunny",
+        "cloudy", "humidity", "wind speed", "climate", "celsius", "fahrenheit",
+    ],
+    "research": [
+        "research", "researching", "search", "web search", "search the web",
+        "look up", "define", "definition", "summary of", "what is",
     ],
 }
 

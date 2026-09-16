@@ -1,6 +1,6 @@
 import json
 
-from app.mcp_server import compare_tools, find_solutions, get_trust_report
+from app.mcp_server import call_tool, compare_tools, find_solutions, get_trust_report, list_public_tools
 
 
 def test_find_solutions_ranks_finance_first():
@@ -98,3 +98,46 @@ def test_mcp_endpoint_list_and_call_tool(client):
     content = body["result"]["content"]
     text = "".join(c.get("text", "") for c in content)
     assert "Top solutions" in text
+
+
+def _mock_weather_http(monkeypatch):
+    def fake_get_json(url, params=None, timeout=None):
+        if "geocoding-api" in url:
+            return {"results": [
+                {"name": "London", "country": "United Kingdom",
+                 "latitude": 51.5074, "longitude": -0.1278, "timezone": "Europe/London"},
+            ]}
+        return {
+            "current": {"temperature_2m": 18.2, "weather_code": 61,
+                        "relative_humidity_2m": 76, "apparent_temperature": 17.5,
+                        "wind_speed_10m": 14.0, "is_day": 1, "time": "2026-09-16T12:00"},
+            "current_units": {"temperature_2m": "°C", "wind_speed_10m": "km/h"},
+        }
+    monkeypatch.setattr("app.providers.weather.http_get_json", fake_get_json)
+
+
+def test_list_public_tools_lists_providers():
+    out = list_public_tools()
+    assert "weather" in out
+    assert "npms_lookup" in out
+    assert "call_tool" in out
+
+
+def test_call_tool_weather_executes(monkeypatch):
+    _mock_weather_http(monkeypatch)
+    out = call_tool("weather", {"location": "London"})
+    assert "executed through the audited gateway" in out
+    assert "temperature" in out
+
+
+def test_call_tool_unknown_provider():
+    out = call_tool("github-mcp", {})
+    assert "Could not execute" in out
+    assert "no gateway provider" in out
+
+
+def test_call_tool_denied_scope(monkeypatch):
+    _mock_weather_http(monkeypatch)
+    out = call_tool("weather", {"location": "London"}, scope="github:write")
+    assert "denied" in out
+    assert "not granted" in out

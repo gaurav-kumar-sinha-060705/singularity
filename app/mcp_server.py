@@ -8,7 +8,7 @@ Three agent-facing tools over streamable HTTP at /mcp:
 Singularity recommends, connects, and gates execution through a secure gateway.
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 import os
 
 from pydantic import Field
@@ -18,8 +18,10 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from app.database import SessionLocal
 from app.models import Tool, log_event
+from app.providers import registry
 from app.services.discovery_engine import parse_intent
 from app.services.embeddings import embed_query
+from app.services.gateway import execute_via_gateway
 from app.services.ranking import FLAG_EXPLANATIONS, rank_candidates
 from app.services.recommendation_index import PRICING_ORDER, index
 
@@ -208,6 +210,80 @@ def compare_tools(
         "|---|---|---|---|---|---|---|"
     )
     return f"### Comparison\n{header}\n" + "\n".join(rows) + note
+
+
+@mcp.tool(
+    description=(
+        "List the public, zero-setup tools that can be executed through the "
+        "Singularity gateway. Each entry shows its slug, category, and granted "
+        "scopes. Use list_public_tools to discover what call_tool can run."
+    ),
+)
+def list_public_tools() -> str:
+    tools = registry.list_public_tools()
+    if not tools:
+        return "### Executable public tools\nnone"
+    lines = [
+        f"- `{t['slug']}` — {t['name']} — {t['category']} — "
+        f"scopes: {', '.join(t['scopes'])}"
+        for t in tools
+    ]
+    return (
+        "### Executable public tools\n" + "\n".join(lines) + "\n\n"
+        "Run one with call_tool(provider_slug=\"<slug>\", arguments={...}, scope=\"public:read\")."
+    )
+
+
+@mcp.tool(
+    description=(
+        "Execute a first-party public tool through the audited Singularity gateway: "
+        "weather (current conditions for a city), npms_lookup (npm package info), "
+        "pypi_lookup (PyPI package info), web_search (DuckDuckGo instant answers). "
+        "The call is scope-checked, trust-checked, and written to the audit log; "
+        "denied or failed calls return the reason. Use list_public_tools to see "
+        "what's available, and find_solutions to be told which slugs fit a problem."
+    ),
+)
+def call_tool(
+    provider_slug: Annotated[str, Field(
+        description="Provider slug to execute, e.g. 'weather'.")],
+    arguments: Annotated[dict[str, Any] | None, Field(
+        description="Arguments for the provider, e.g. {\"location\": \"London\"}.")] = None,
+    scope: Annotated[str | None, Field(
+        description="Scope to request. Defaults to 'public:read'.")] = None,
+) -> str:
+    out = execute_via_gateway(
+        provider_slug,
+        arguments or {},
+        scope=scope,
+        channel="mcp",
+    )
+
+    if out["decision"] == "not_found":
+        known = ", ".join(p["slug"] for p in registry.list_public_tools()) or "(none)"
+        return (
+            f"Could not execute '{provider_slug}': {out['reason']}. "
+            f"Executable providers: {known}. Use list_public_tools to see them."
+        )
+    if out["decision"] == "denied":
+        return f"Execution denied for '{provider_slug}': {out['reason']}."
+    if out["decision"] == "disabled":
+        return f"Execution unavailable: {out['reason']}."
+    if out["decision"] == "failed":
+        return f"Execution of '{provider_slug}' failed: {out['reason']}."
+
+    result = out.get("result") or {}
+    lines = [f"### {provider_slug} — executed through the audited gateway (scope {out['scope']})"]
+    for key, value in result.items():
+        if isinstance(value, (dict, list)):
+            import json as _json
+            lines.append(f"- **{key}:** {_json.dumps(value)[:400]}")
+        else:
+            lines.append(f"- **{key}:** {value}")
+    lines.append(f"- **version:** {out.get('version')}")
+    lines.append(f"- **latency_ms:** {out.get('latency_ms')}")
+    lines.append("Call recorded in the audit log (decision=allowed).")
+    return "\n".join(lines)
 
 
 def _configured_allowed_hosts() -> list[str]:

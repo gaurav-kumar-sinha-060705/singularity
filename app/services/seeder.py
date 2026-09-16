@@ -72,12 +72,29 @@ def _backfill_embeddings(db) -> int:
     return len(targets)
 
 
+def _populate(db, tool, entry) -> list[str]:
+    """Copy one seed entry onto a Tool row (new or existing), returning flags."""
+    flags = scan_tool(entry)
+    for field in COPY_FIELDS:
+        if field in entry:
+            setattr(tool, field, entry[field])
+    tool.trust_score = float(entry.get("trust_score", 0.5))
+    tool.integrations_json = json.dumps(entry.get("integrations", []))
+    tool.permissions_requested_json = json.dumps(entry.get("permissions_requested", []))
+    tool.permissions_needed_json = json.dumps(entry.get("permissions_needed", []))
+    tool.trust_flags_json = json.dumps(flags)
+    db.flush()
+    return flags
+
+
 def seed(recompute_embeddings: bool = True, skip_if_nonempty: bool = False) -> dict:
     """Ingest seed_tools.json into the DB; returns {indexed, flagged}.
 
-    skip_if_nonempty: when True (used by seed-on-boot), a non-empty tools table
-    short-circuits the seed — checked *inside* the advisory lock so concurrent
-    booting instances cannot double-seed.
+    skip_if_nonempty: when True (used by seed-on-boot), an existing tools table
+    short-circuits full re-seeding but still ingests any *missing* slugs from
+    the seed file (e.g. newly added providers), so deployed databases pick up
+    new seed entries on boot without a manual reseed. Runs inside the advisory
+    lock so concurrent booting instances cannot double-seed.
     """
     entries = _load_entries()
     Base.metadata.create_all(bind=engine)
@@ -87,10 +104,27 @@ def seed(recompute_embeddings: bool = True, skip_if_nonempty: bool = False) -> d
             db.execute(text("SELECT pg_advisory_xact_lock(:key)"),
                        {"key": _SEED_ADVISORY_LOCK_KEY})
         if skip_if_nonempty and tool_count() > 0:
-            rows = db.scalars(select(Tool)).all()
-            print(f"[singularity] database already has {len(rows)} tools — skipping seed")
+            existing = set(db.scalars(select(Tool.slug)).all())
+            missing = [e for e in entries if e["slug"] not in existing]
+            if missing:
+                for entry in missing:
+                    tool = Tool(id=_tool_id(entry["slug"]), slug=entry["slug"])
+                    db.add(tool)
+                    flags = _populate(db, tool, entry)
+                    log_event(
+                        db, "tool_ingested", tool_id=tool.id, slug=tool.slug,
+                        flags=flags, new_flags=flags, cleared_flags=[],
+                        trust_score=tool.trust_score,
+                    )
+                db.commit()
+                print(f"[singularity] database had {len(existing)} tools — "
+                      f"ingested {len(missing)} new seed entry/entries: "
+                      f"{', '.join(e['slug'] for e in missing)}")
+            else:
+                print(f"[singularity] database already has {len(existing)} tools — skipping seed")
             if recompute_embeddings:
                 _backfill_embeddings(db)
+            rows = db.scalars(select(Tool)).all()
             return {"indexed": len(rows), "flagged": sum(1 for t in rows if t.trust_flags)}
         for entry in entries:
             flags = scan_tool(entry)
@@ -98,17 +132,8 @@ def seed(recompute_embeddings: bool = True, skip_if_nonempty: bool = False) -> d
             if not tool:
                 tool = Tool(id=_tool_id(entry["slug"]), slug=entry["slug"])
                 db.add(tool)
-            for field in COPY_FIELDS:
-                if field in entry:
-                    setattr(tool, field, entry[field])
-            tool.trust_score = float(entry.get("trust_score", 0.5))
-            tool.integrations_json = json.dumps(entry.get("integrations", []))
-            tool.permissions_requested_json = json.dumps(entry.get("permissions_requested", []))
-            tool.permissions_needed_json = json.dumps(entry.get("permissions_needed", []))
             old_flags = set(tool.trust_flags)
-            tool.trust_flags_json = json.dumps(flags)
-            db.flush()  # emit the fully-populated INSERT now so audit rows can never outrun it
-
+            flags = _populate(db, tool, entry)
             log_event(
                 db,
                 "tool_ingested",

@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.audit import extract_audit_context
 from app.database import get_db
-from app.models import Tool, hash_ip, log_event
+from app.models import Tool, log_event
 from app.schemas import RecommendRequest, RecommendResponse, RecommendationItem
 from app.services.discovery_engine import parse_intent
 from app.services.embeddings import embed_query
@@ -13,20 +14,10 @@ from app.services.recommendation_index import index
 router = APIRouter()
 
 
-def _extract_audit_context(request: Request) -> dict:
-    channel = request.headers.get("x-test-source", "rest")
-    raw_ip = (
-        request.headers.get("x-forwarded-for", "")
-        or (request.client.host if request.client else "unknown")
-    )
-    ip = raw_ip.split(",")[0].strip() or "unknown"
-    return {"channel": channel, "ip_hash": hash_ip(ip)}
-
-
 @router.post("/recommend", response_model=RecommendResponse)
 def recommend(payload: RecommendRequest, request: Request, db: Session = Depends(get_db)):
     intent = parse_intent(payload.problem)
-    audit = _extract_audit_context(request)
+    audit = extract_audit_context(request)
 
     query_embedding = embed_query(payload.problem)
     hits = index.search(

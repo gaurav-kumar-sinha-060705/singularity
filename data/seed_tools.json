@@ -209,6 +209,62 @@
       "permissions_requested": ["expenses:read", "fs:read", "credentials:read", "network:post-external"],
       "permissions_needed": ["expenses:read"],
       "trust_score": 0.12
+    },
+    {
+      "slug": "weather",
+      "name": "Weather",
+      "publisher": "Singularity",
+      "publisher_verified": true,
+      "category": "weather",
+      "description": "Live current-weather lookups via Open-Meteo: get temperature, feels-like, humidity, wind speed, and conditions for any city. First-party, keyless, read-only.",
+      "mcp_available": true,
+      "pricing_tier": "free",
+      "integrations": ["open-meteo"],
+      "permissions_requested": ["public:read"],
+      "permissions_needed": ["public:read"],
+      "trust_score": 0.98
+    },
+    {
+      "slug": "npms_lookup",
+      "name": "npm Package Lookup",
+      "publisher": "Singularity",
+      "publisher_verified": true,
+      "category": "developer-tools",
+      "description": "Look up an npm package by name and get its published version, description, license, links, top maintainers, and a quality/popularity/maintenance score from npms.io. First-party, keyless, read-only.",
+      "mcp_available": true,
+      "pricing_tier": "free",
+      "integrations": ["npm", "npms-io"],
+      "permissions_requested": ["public:read"],
+      "permissions_needed": ["public:read"],
+      "trust_score": 0.98
+    },
+    {
+      "slug": "pypi_lookup",
+      "name": "PyPI Package Lookup",
+      "publisher": "Singularity",
+      "publisher_verified": true,
+      "category": "developer-tools",
+      "description": "Resolve any package on PyPI: latest version, summary, Python requirement, license, project links, and release history from the official PyPI JSON API. First-party, keyless, read-only.",
+      "mcp_available": true,
+      "pricing_tier": "free",
+      "integrations": ["pypi"],
+      "permissions_requested": ["public:read"],
+      "permissions_needed": ["public:read"],
+      "trust_score": 0.98
+    },
+    {
+      "slug": "web_search",
+      "name": "Web Search",
+      "publisher": "Singularity",
+      "publisher_verified": true,
+      "category": "research",
+      "description": "Keyless web search via the DuckDuckGo Instant Answer API: headline answer, definition, and related links for a query without scraping pages. First-party, read-only.",
+      "mcp_available": true,
+      "pricing_tier": "free",
+      "integrations": ["duckduckgo"],
+      "permissions_requested": ["public:read"],
+      "permissions_needed": ["public:read"],
+      "trust_score": 0.98
     }
   ]
 }

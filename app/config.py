@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     # Glama ownership verification token (served at /.well-known/glama.json).
     glama_claim: str = "glama_claim_u7S6w2_iR_kGDr86GYa0az7UVK2nKuUy"
 
+    # Execution gateway
+    execute_enabled: bool = True
+    execute_min_trust: float = 0.6
+    provider_http_timeout: float = 10.0
+
 
 @lru_cache
 def get_settings() -> Settings:

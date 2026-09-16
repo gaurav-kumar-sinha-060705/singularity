@@ -8,7 +8,7 @@ from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.mcp_server import build_mcp_asgi_app
 from app.middleware.rate_limit import RateLimitMiddleware
-from app.routers import recommend
+from app.routers import execute, recommend
 from app.services.embeddings import get_model
 from app.services.recommendation_index import index
 from app.services.seeder import seed_if_empty
@@ -45,6 +45,7 @@ def create_app() -> FastAPI:
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
     app.add_middleware(RateLimitMiddleware, limit_per_min=settings.rate_limit_per_min)
     app.include_router(recommend.router, prefix=settings.api_v1_prefix)
+    app.include_router(execute.router, prefix=settings.api_v1_prefix)
 
     @app.get("/health")
     def health():
