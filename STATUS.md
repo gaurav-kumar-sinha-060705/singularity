@@ -6,36 +6,39 @@
 ## TL;DR
 
 - Render deploy `https://singularity-osd2.onrender.com` is **live with Phase 4.6
-  native MCP OAuth** (RFC 9745). `/.well-known/oauth-authorization-server` returns
-  200 with the correct issuer; `indexed_tools: 21`; unauthenticated `POST /mcp`
-  correctly returns 401.
-- The SDK smoke handshake (`scripts/smoke_oauth.py`) passes end-to-end
-  (register → authorize → consent signup → approve → token → initialize →
-  tools/list).
-- **DONE (2026-09-17): the two registration blockers are fixed + new helpers:**
-  - `client_secret_post` 500 **fixed**: the `OAuthClient.client_secret_hash`
-    column was `VARCHAR(128)` — Fernet tokens of a 64-char secret are ~184 chars,
-    so Postgres raised `value too long` → 500 (SQLite ignored the limit, which is
-    why local repros passed). Column widened to `String(512)` + boot migration.
-  - Claude.ai `private_key_jwt` **unblocked**: `app/mcp_auth_ext.py` swaps the
-    SDK's registration/auth handlers so `private_key_jwt` DCR is accepted, the
-    client's public JWKS is stored, and `/token` verifies RFC 7523
-    `client_assertion` JWTs (iss/sub == client_id, aud check, exp enforced).
-    RFC 8414 metadata now advertises `private_key_jwt`.
-  - Settings polish: `valid_scopes=["mcp:tools"]` publishes `scopes_supported`
-    in metadata and rejects out-of-scope DCR requests.
-- **Test suite: 122 passed, 1 warning** (10 new regression/integration tests).
+  native MCP OAuth** (RFC 9745) + **Glama/Claude interop verified**:
+  - `/.well-known/oauth-authorization-server` advertises `private_key_jwt` +
+    `scopes_supported=["mcp:tools"]`.
+  - Live matrix: DCR 201 for private_key_jwt / client_secret_post / none; the
+    full register→authorize→consent→token→/mcp flow returns 200 for public,
+    client_secret_post, and private_key_jwt clients.
+  - Claude.ai connector is unblocked (private_key_jwt + client_secret_post both
+    work). Glama's public unauth probe still 401s by design (OAuth required);
+    the only interop gap left there is private_key_jwt without `client_id` in the
+    /token form (our server 401s "Missing client_id").
+- **NEW (2026-09-17): connect dashboard + live credential verify.**
+  - `GET /dashboard` (and `/`) — self-contained page: sign in/sign up, connect
+    hosted MCP tools via OAuth (if provider configured) or paste an API key,
+    then **Verify** (probes the remote MCP with the stored credential and lists
+    its tools). Guides the user to call via Claude afterwards.
+  - `GET /api/v1/connections/{slug}/verify` — decrypt vault credential → build
+    auth headers → initialize + tools/list against the hosted remote; 200 =
+    `call_tool(slug, …)` will authenticate. Audited (`connection_verified`).
+- **Test suite: 130 passed, 1 warning** (8 new dashboard/verify tests).
 
 ## Open problems
 
-- **None known for registration.** Real-world Claude.ai E2E still to confirm once
-  this build is deployed (Claude's own `private_key_jwt` flow + redirect UI).
+- Glama interop: accept `client_id` derived from the client_assertion `iss` when
+  the /token form omits it (optionally harden `app/mcp_auth_ext.py`).
 - P3 (low): `validate_token_resource` is not set (SDK 3.0 will default it True) —
   consider setting it later.
 
 ## Current state of the codebase
 
 ### Committed & pushed (Render redeployed)
+- `845fe6e` unblock Claude OAuth: private_key_jwt DCR/token-auth + fix
+  client_secret_post 500 on Postgres (widened client_secret_hash,
+  jwks_json, valid_scopes). Live-verified on Render (2026-09-17).
 - `3dd29d5` Phase 4.5 stdio bridge (old)
 - `b5c0312` Phase 4.6 native MCP OAuth (SDK auth server provider)
 - `6619354` docs: Milestone 4.6 plan
@@ -46,21 +49,17 @@
 - `69eb67a` added STATUS.md + scripts/smoke_oauth.py
 
 ### Uncommitted working tree (2026-09-17)
-- `app/models.py` — `client_secret_hash` → `String(512)`; added `jwks_json`.
-- `app/migrations.py` — widen `client_secret_hash` on Postgres (idempotent);
-  add `oauth_clients.jwks_json`; guard tools ALTERs on table existence.
-- `app/mcp_oauth.py` — persist/load client `jwks` (inline or via `jwks_uri`);
-  `_resolve_jwks` helper.
-- `app/mcp_auth_ext.py` — NEW: private_key_jwt registration + token-auth +
-  metadata advertisement (`install_oauth_extensions()`).
-- `app/mcp_server.py` — `valid_scopes=["mcp:tools"]`; calls
-  `install_oauth_extensions()` before building the /mcp app.
-- `tests/` — RSA/JWKS helpers + 10 new tests (client_secret_post round-trip &
-  full flow, private_key_jwt full flow + bad-signature/aud rejects, metadata,
-  migrations).
+- `app/routers/connections.py` — NEW `GET /{provider_slug}/verify`: decrypt
+  vault credential → probe remote MCP (initialize + tools/list) → tool count.
+- `app/static/dashboard.html` — NEW connect page (sign-in, OAuth or API-key
+  connect, verify, Claude call guidance, same-account note).
+- `app/routers/dashboard.py` — NEW: serves `/dashboard` + `/` redirect.
+- `app/main.py` — include dashboard router before the /mcp mount.
+- `tests/test_dashboard_verify.py` — 8 tests (page, redirect, verify
+  success/400/404/502/401/501).
 
 ### Test suite
-- `python -m pytest tests/ -q` → **122 passed, 1 warning** (pre-existing
+- `python -m pytest tests/ -q` → **130 passed, 1 warning** (pre-existing
   Starlette deprecation).
 
 ## How to reproduce/verify
@@ -80,8 +79,10 @@ PY
 ```
 
 ## Next steps (in order)
-1. Deploy this working tree to Render (commit + push).
-2. Re-run live smoke + confirm Claude.ai connector (Sign in now mode) wraps.
+1. Commit + push this working tree (dashboard + verify endpoint) → Render
+   auto-deploys; re-verify `/dashboard` and a verify call live.
+2. User connects a Tier 2 tool on `/dashboard` (OAuth if GitHub App envs set, or
+   paste an API key), Save & verify → green, then call_tool from Claude.
 3. Re-publish registry (`npx mcp-publisher@latest publish`) once Claude.ai
    connects — bump `server.json` version (already 0.3.0).
 4. (Vision — unstarted) singular MCP endpoint that brokers all registered tools:

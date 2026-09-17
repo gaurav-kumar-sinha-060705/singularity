@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Singularity · Connect your tools</title>
+<style>
+:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; max-width: 720px; margin: 0 auto; padding: 24px 16px 60px; line-height: 1.5; color: #1a1a1a; }
+@media (prefers-color-scheme: dark) { body { color: #e6e6e6; } }
+h1 { font-size: 1.5rem; margin-bottom: 4px; }
+h2 { font-size: 1.05rem; margin: 26px 0 10px; }
+.sub { opacity: .75; margin-top: 0; font-size: .92rem; }
+.box { border: 1px solid #8884; border-radius: 12px; padding: 18px 20px; margin: 14px 0; }
+label { display: block; margin: 10px 0 4px; font-weight: 600; font-size: .85rem; }
+input, select { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 8px; border: 1px solid #8888; font-size: 1rem; background: transparent; color: inherit; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.row .grow { flex: 1; min-width: 180px; }
+button { padding: 10px 16px; border: 0; border-radius: 8px; background: #0b58fe; color: #fff; font-size: .95rem; font-weight: 600; cursor: pointer; }
+button:hover { background: #0a4ddb; }
+button.ghost { background: transparent; color: #0b58fe; border: 1px solid #0b58fe88; }
+button:disabled { opacity: .5; cursor: default; }
+button.danger { background: transparent; color: #d33; border: 1px solid #d33a; }
+table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #8882; vertical-align: top; }
+th { opacity: .6; font-weight: 600; }
+.badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .78rem; font-weight: 600; }
+.badge.ok { background: #16a34a22; color: #16a34a; }
+.badge.warn { background: #f59e0b22; color: #b45309; }
+.badge.err { background: #dc262622; color: #dc2626; }
+.hint { font-size: .86rem; opacity: .8; margin-top: 6px; }
+.msg { padding: 10px 14px; border-radius: 8px; margin: 10px 0; font-size: .92rem; white-space: pre-wrap; }
+.msg.err { background: #dc262611; border: 1px solid #dc262633; }
+.msg.ok { background: #16a34a11; border: 1px solid #16a34a33; }
+code { background: #8882; padding: 1px 6px; border-radius: 6px; font-size: .88em; }
+#auth, #app { display: none; }
+.alt { text-align: center; margin-top: 12px; font-size: .88rem; }
+.toolrow { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #8882; flex-wrap: wrap; }
+.toolrow:last-child { border-bottom: 0; }
+.toolname { font-weight: 600; }
+.desc { font-size: .85rem; opacity: .8; }
+.spin { display: inline-block; width: 12px; height: 12px; border: 2px solid #8884; border-top-color: #0b58fe; border-radius: 50%; animation: sp 0.8s linear infinite; vertical-align: -2px; }
+@keyframes sp { to { transform: rotate(360deg); } }
+footer { margin-top: 40px; font-size: .8rem; opacity: .6; text-align: center; }
+</style>
+</head>
+<body>
+<div id="auth">
+  <h1>Singularity · Connect your tools</h1>
+  <p class="sub">Add credentials so your MCP clients (Claude, Glama, …) can execute hosted tools through the audited gateway.</p>
+  <div class="box">
+    <h2 id="authTitle">Sign in</h2>
+    <label for="email">Email</label>
+    <input type="email" id="email" autocomplete="email">
+    <label for="password">Password</label>
+    <input type="password" id="password" autocomplete="current-password">
+    <div style="margin-top:14px"><button id="authBtn" onclick="doAuth(false)">Sign in</button></div>
+    <p class="alt">First time? <a href="#" onclick="doAuth(true); return false;">Create an account</a></p>
+    <p class="hint">Use the <strong>same email and password you used when authorizing Claude</strong> — credentials are scoped to that account.</p>
+  </div>
+  <div id="authMsg" class="msg"></div>
+</div>
+
+<div id="app">
+  <h1>Singularity · Connect your tools</h1>
+  <p class="sub">Signed in as <strong id="who"></strong> — <a href="#" onclick="signOut(); return false;">sign out</a></p>
+  <div id="appMsg" class="msg"></div>
+
+  <h2>Connect a hosted MCP tool</h2>
+  <div class="box">
+    <div id="catalog">
+      <div class="hint"><span class="spin"></span> Loading available tools…</div>
+    </div>
+  </div>
+
+  <h2>Your connections</h2>
+  <div class="box" id="connBox">
+    <div class="hint"><span class="spin"></span> Loading…</div>
+  </div>
+
+  <h2>Call it from Claude</h2>
+  <div class="box">
+    <p style="margin-top:0">Once a connection is <strong>verified</strong>, ask Claude to execute it, e.g.:</p>
+    <div><code>call_tool(provider_slug="github-mcp", arguments={"tool": "&lt;tool name&gt;", "arguments": {…}}, scope="public:read")</code></div>
+    <p class="hint">First discover tool names with <code>list_public_tools()</code>, then call. Every call is audited (decision, latency, user).</p>
+  </div>
+</div>
+
+<footer>Singularity — MCP Discovery &amp; Security Gateway · credentials are Fernet-encrypted in the vault</footer>
+
+<script>
+let TOKEN = sessionStorage.getItem("sg_token") || "";
+async function api(path, opts = {}) {
+  const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+  if (TOKEN) headers["Authorization"] = "Bearer " + TOKEN;
+  const res = await fetch(path, Object.assign({}, opts, { headers }));
+  let body = null;
+  try { body = await res.json(); } catch (e) { /* non-json */ }
+  if (res.status === 401 && TOKEN && path !== "/api/v1/auth/signin") { sessionStorage.removeItem("sg_token"); location.reload(); }
+  return { status: res.status, body };
+}
+
+function bubble(id, text, kind) {
+  const el = document.getElementById(id);
+  el.className = "msg " + kind;
+  el.textContent = text;
+}
+
+async function doAuth(signup) {
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
+  if (!email || !password) return bubble("authMsg", "Email and password are required.", "err");
+  document.getElementById("authBtn").disabled = true;
+  const r = await api(signup ? "/api/v1/auth/signup" : "/api/v1/auth/signin", {
+    method: "POST", body: JSON.stringify({ email, password }),
+  });
+  document.getElementById("authBtn").disabled = false;
+  if (r.status === 409) {
+    document.getElementById("authTitle").textContent = "Sign in";
+    bubble("authMsg", "Account already exists — use the sign-in button.", "warn");
+    return;
+  }
+  if (r.status !== 200 && r.status !== 201) {
+    bubble("authMsg", (r.body && r.body.detail) || "Authentication failed.", "err");
+    return;
+  }
+  TOKEN = r.body.access_token;
+  sessionStorage.setItem("sg_token", TOKEN);
+  sessionStorage.setItem("sg_email", email);
+  showApp();
+}
+
+function signOut() { sessionStorage.removeItem("sg_token"); location.reload(); }
+
+async function showApp() {
+  const email = sessionStorage.getItem("sg_email") || "";
+  document.getElementById("who").textContent = email || "account";
+  document.getElementById("auth").style.display = "none";
+  document.getElementById("app").style.display = "block";
+  renderCatalog();
+  renderConnections();
+}
+
+async function renderCatalog() {
+  const el = document.getElementById("catalog");
+  el.innerHTML = '<div class="hint"><span class="spin"></span> Loading…</div>';
+  const [toolsR, provsR] = await Promise.all([
+    api("/api/v1/tools?mcp_only=true"),
+    api("/api/v1/oauth/providers"),
+  ]);
+  const tools = (toolsR.body && toolsR.body.tools || []).filter(t => t.execution_tier === "hosted");
+  const provs = (provsR.body || []);
+  const provBySlug = Object.fromEntries(provs.map(p => [p.slug, p]));
+  if (!tools.length) { el.innerHTML = '<div class="hint">No hosted MCP tools indexed yet.</div>'; return; }
+
+  let html = "";
+  for (const t of tools) {
+    const oauthSlug = t.slug.endsWith("-mcp") ? t.slug.slice(0, -4) : null;
+    const prov = oauthSlug ? provBySlug[oauthSlug] : null;
+    const oauthOn = prov && prov.configured;
+    const conn = await api("/api/v1/connections");
+    const stored = (conn.body || []).some(c => c.provider_slug === t.slug);
+    html += `
+      <div class="toolrow">
+        <div class="grow">
+          <div class="toolname">${t.name} <code>${t.slug}</code></div>
+          <div class="desc">${(t.description || "").slice(0, 120)}</div>
+        </div>
+        <div class="row">
+          ${oauthOn ? `<button class="ghost" onclick="startOAuth('${oauthSlug}')">Connect with ${prov.name}</button>` : ""}
+          ${!oauthOn ? '<button class="ghost" onclick="showKeyForm(\'' + t.slug + '\')">Add API key</button>' : ""}
+          <span id="tag-${t.slug}" class="badge ${stored ? "ok" : "warn"}">${stored ? "connected" : "not connected"}</span>
+        </div>
+      </div>
+      <div id="keyform-${t.slug}"></div>`;
+  }
+  el.innerHTML = html;
+  const conn = await api("/api/v1/connections");
+  let cc = 0;
+  const rows = document.querySelectorAll(".toolrow");
+  for (const r of rows) {
+    const code = r.querySelector("code");
+    if (code) { const slug = code.textContent; if ((conn.body||[]).some(c => c.provider_slug === slug)) cc++; }
+  }
+  const note = document.createElement("div");
+  note.className = "hint";
+  note.textContent = cc + " tool(s) connected for this account.";
+  el.appendChild(note);
+}
+
+function showKeyForm(slug) {
+  const box = document.getElementById("keyform-" + slug);
+  if (box.dataset.open) { box.innerHTML = ""; box.dataset.open = ""; return; }
+  box.dataset.open = "1";
+  box.innerHTML = `
+    <div class="box">
+      <label for="key-${slug}">API key / access token for <code>${slug}</code></label>
+      <input id="key-${slug}" type="password" placeholder="ghp_… / sk_… / xoxb-…">
+      <div style="margin-top:10px">
+        <button onclick="saveKey('${slug}')">Save & verify</button>
+        <button class="ghost" onclick="showKeyForm('${slug}')">Cancel</button>
+      </div>
+      <div id="keymsg-${slug}" class="msg"></div>
+    </div>`;
+}
+
+async function saveKey(slug) {
+  const input = document.getElementById("key-" + slug);
+  const val = input.value.trim();
+  const m = document.getElementById("keymsg-" + slug);
+  if (!val) { m.className = "msg err"; m.textContent = "Token is required."; return; }
+  const r = await api("/api/v1/connections", {
+    method: "POST",
+    body: JSON.stringify({ provider_slug: slug, credential: { access_token: val } }),
+  });
+  if (r.status >= 300) { m.className = "msg err"; m.textContent = r.body && r.body.detail || "Save failed."; return; }
+  m.className = "msg ok";
+  m.innerHTML = "Credential stored (encrypted). Verifying… <span class='spin'></span>";
+  await verify(slug, m);
+  renderCatalog();
+}
+
+async function startOAuth(slug) {
+  try {
+    const res = await fetch("/api/v1/oauth/" + slug + "/authorize", {
+      headers: { Authorization: "Bearer " + TOKEN },
+      redirect: "manual",
+    });
+    if (res.type === "opaqueredirect") {
+      const url = new URL(window.location.href);
+      window.location.href = "/api/v1/oauth/" + slug + "/authorize";
+      return;
+    }
+    const loc = res.headers.get("location");
+    if (loc) { window.location.href = loc; return; }
+    const data = await res.json().catch(() => null);
+    bubble("appMsg", (data && data.detail) || ("Could not start OAuth (" + res.status + ")."), "err");
+  } catch (e) {
+    bubble("appMsg", "Could not start OAuth: " + e.message, "err");
+  }
+}
+
+async function renderConnections() {
+  const box = document.getElementById("connBox");
+  const r = await api("/api/v1/connections");
+  if (r.status >= 300) { box.innerHTML = '<div class="hint">Could not load connections.</div>'; return; }
+  const rows = r.body || [];
+  if (!rows.length) { box.innerHTML = '<div class="hint">No connections yet — add a credential above.</div>'; return; }
+  let html = "<table><tr><th>Provider</th><th>Added</th><th>Status</th><th></th></tr>";
+  for (const c of rows) {
+    const name = (c.provider_slug || "").replace(/-mcp$/, "");
+    html += `<tr id="conn-${c.provider_slug}">
+      <td><code>${c.provider_slug}</code></td>
+      <td>${new Date(c.created_at).toLocaleString()}</td>
+      <td><span id="st-${c.provider_slug}">—</span></td>
+      <td><button class="ghost" onclick="verify('${c.provider_slug}')">Verify</button></td>
+    </tr>`;
+  }
+  html += "</table>";
+  box.innerHTML = html;
+}
+
+async function verify(slug, el) {
+  const st = el || document.getElementById("st-" + slug);
+  if (st) { st.innerHTML = '<span class="spin"></span>'; }
+  const r = await api("/api/v1/connections/" + slug + "/verify");
+  if (r.status === 200) {
+    const b = r.body;
+    if (st) st.innerHTML = `<span class="badge ok">verified · ${b.tool_count} tools</span>`;
+    const tools = (b.tools || []).slice(0, 5).join(", ");
+    bubble("appMsg", "Verified " + b.provider_name + " — " + b.tool_count + " tool(s) reachable: " + tools + (b.tool_count > 5 ? ", …" : "") + "\n\nClaude can now call_tool(\"" + slug + "\", …).", "ok");
+  } else {
+    const msg = (r.body && r.body.detail) || "Verification failed.";
+    if (st) st.innerHTML = '<span class="badge err">failed</span>';
+    bubble("appMsg", "Verification failed for " + slug + ": " + msg, "err");
+  }
+}
+
+(async function boot() {
+  if (TOKEN) {
+    const me = await api("/api/v1/auth/me");
+    if (me.status === 200) { sessionStorage.setItem("sg_email", (me.body && me.body.email) || ""); return showApp(); }
+    TOKEN = "";
+    sessionStorage.removeItem("sg_token");
+  }
+  document.getElementById("auth").style.display = "block";
+})();
+</script>
+</body>
+</html>
