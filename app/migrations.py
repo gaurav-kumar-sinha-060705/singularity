@@ -49,18 +49,38 @@ def run(db: Session) -> None:
             db.commit()
             print(f"[singularity] migration: created table {table}")
 
+    dialect = _dialect(db.get_bind())
+
+    if "tools" in already:
+        try:
+            tool_cols = _columns(db, "tools")
+        except Exception as exc:
+            print(f"[singularity] migration: cannot inspect tools table — {exc}")
+            tool_cols = set()
+
+        migrations = [
+            ("tools", "requires_credential", "BOOLEAN NOT NULL DEFAULT false" if dialect == "postgresql" else "BOOLEAN NOT NULL DEFAULT 0"),
+            ("tools", "execution_tier", "VARCHAR(20) NOT NULL DEFAULT 'unknown'"),
+        ]
+
+        for table, col, dtype in migrations:
+            if col not in tool_cols:
+                _add_column(db, table, col, dtype)
+
+    # OAuth client records: Fernet tokens for a 64-char secret are ~184 chars and
+    # Postgres enforces VARCHAR length, so a column born as VARCHAR(128) must be
+    # widened or client_secret_post registration 500s. Also adds jwks_json for
+    # private_key_jwt clients. Idempotent (ALTER .. TYPE to the same width is a
+    # no-op; ADD COLUMN is guarded by column presence).
     try:
-        tool_cols = _columns(db, "tools")
+        oauth_cols = _columns(db, "oauth_clients")
     except Exception as exc:
-        print(f"[singularity] migration: cannot inspect tools table — {exc}")
+        print(f"[singularity] migration: cannot inspect oauth_clients table — {exc}")
         return
 
-    dialect = _dialect(db.get_bind())
-    migrations = [
-        ("tools", "requires_credential", "BOOLEAN NOT NULL DEFAULT false" if dialect == "postgresql" else "BOOLEAN NOT NULL DEFAULT 0"),
-        ("tools", "execution_tier", "VARCHAR(20) NOT NULL DEFAULT 'unknown'"),
-    ]
-
-    for table, col, dtype in migrations:
-        if col not in tool_cols:
-            _add_column(db, table, col, dtype)
+    if "client_secret_hash" in oauth_cols and dialect == "postgresql":
+        db.execute(text("ALTER TABLE oauth_clients ALTER COLUMN client_secret_hash TYPE VARCHAR(512)"))
+        db.commit()
+        print("[singularity] migration: widened oauth_clients.client_secret_hash (VARCHAR(128) -> VARCHAR(512))")
+    if "jwks_json" not in oauth_cols:
+        _add_column(db, "oauth_clients", "jwks_json", "TEXT")

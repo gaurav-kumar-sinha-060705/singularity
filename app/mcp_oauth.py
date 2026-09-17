@@ -88,9 +88,33 @@ def _to_client_full(row: OAuthClient) -> OAuthClientInformationFull:
         "token_endpoint_auth_method": row.token_endpoint_auth_method or "none",
         "client_secret": client_secret,
     }
+    if row.jwks_json:
+        try:
+            data["jwks"] = json.loads(row.jwks_json)
+        except json.JSONDecodeError:
+            pass
     if client_secret:
         data["client_secret_expires_at"] = 0
     return OAuthClientInformationFull.model_validate(data)
+
+
+def _resolve_jwks(client_info: OAuthClientInformationFull) -> str | None:
+    """Inline `jwks` from the DCR request, falling back to a one-time fetch of
+    `jwks_uri` (a client public-key document; fetched at registration time so the
+    token endpoint can verify private_key_jwt assertions offline)."""
+    if client_info.jwks is not None:
+        return json.dumps(client_info.jwks)
+    if client_info.jwks_uri is not None:
+        import httpx
+
+        try:
+            resp = httpx.get(str(client_info.jwks_uri), timeout=10.0)
+            resp.raise_for_status()
+            return json.dumps(resp.json())
+        except Exception as exc:  # pragma: no cover - degraded, logs and registers anyway
+            print(f"[singularity] oauth: could not fetch jwks_uri {client_info.jwks_uri}: {exc}")
+            return None
+    return None
 
 
 class SingularityOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCode, RefreshToken, AccessToken]):
@@ -121,6 +145,7 @@ class SingularityOAuthProvider(OAuthAuthorizationServerProvider[AuthorizationCod
                 scope=client_info.scope,
                 grant_types_json=json.dumps(client_info.grant_types or ["authorization_code", "refresh_token"]),
                 token_endpoint_auth_method=client_info.token_endpoint_auth_method or "none",
+                jwks_json=_resolve_jwks(client_info),
             )
             db.add(row)
             db.commit()

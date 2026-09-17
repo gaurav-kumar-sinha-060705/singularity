@@ -13,6 +13,68 @@ def pkce():
     return verifier, challenge
 
 
+def rsa_client_keypair(kid="pytest-key"):
+    """Generate an RSA keypair: (private_pem, jwks_dict) for client_assertions."""
+    from base64 import urlsafe_b64encode
+
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private_pem = key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ).decode("utf-8")
+
+    def _b64u(i):
+        return urlsafe_b64encode(i.to_bytes((i.bit_length() + 7) // 8, "big")).rstrip(b"=").decode()
+
+    numbers = key.public_key().public_numbers()
+    jwks = {
+        "keys": [
+            {"kty": "RSA", "n": _b64u(numbers.n), "e": _b64u(numbers.e), "kid": kid, "alg": "RS256"}
+        ]
+    }
+    return private_pem, jwks
+
+
+def register_secret_client(client, redirect_uri="http://testserver/callback", method="client_secret_post", **extra):
+    """Register a client that authenticates with a minted client secret (or private_key_jwt)."""
+    payload = {
+        "redirect_uris": [redirect_uri],
+        "client_name": "pytest-secret-client",
+        "token_endpoint_auth_method": method,
+        "grant_types": ["authorization_code", "refresh_token"],
+        "response_types": ["code"],
+        "scope": "mcp:tools",
+        **extra,
+    }
+    resp = client.post("/register", json=payload)
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def sign_client_assertion(client_id, private_pem, jwks, audience="https://testserver/token", kid="pytest-key"):
+    """Sign an RFC 7523 client_assertion JWT for /token authentication."""
+    import time
+
+    from jose import jwt as jose_jwt
+
+    return jose_jwt.encode(
+        {
+            "iss": client_id,
+            "sub": client_id,
+            "aud": audience,
+            "exp": int(time.time()) + 300,
+            "jti": secrets.token_hex(16),
+        },
+        private_pem,
+        algorithm="RS256",
+        headers={"kid": kid},
+    )
+
+
 def register_client(client, redirect_uri="http://testserver/callback"):
     resp = client.post(
         "/register",

@@ -52,6 +52,7 @@ mcp = MCPServer(
         client_registration_options=ClientRegistrationOptions(
             enabled=True,
             default_scopes=["mcp:tools"],
+            valid_scopes=["mcp:tools"],
         ),
         revocation_options=RevocationOptions(enabled=True),
         required_scopes=["mcp:tools"],
@@ -348,7 +349,14 @@ def build_mcp_asgi_app():
     server routes (/.well-known/oauth-authorization-server, /authorize, /token,
     /register, /revoke), requires a bearer access token on /mcp, and publishes
     the verified user via its auth context — which call_tool() reads.
+
+    The SDK's stock auth handlers are replaced with private_key_jwt-capable
+    ones before the app is built (see app.mcp_auth_ext).
     """
+    from app.mcp_auth_ext import install_oauth_extensions
+
+    install_oauth_extensions()
+
     app = mcp.streamable_http_app(
         stateless_http=True,
         json_response=True,

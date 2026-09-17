@@ -124,3 +124,64 @@ def test_run_migration_adds_columns_on_missing_drifted_schema():
         cols = {row[1] for row in conn.execute(text("PRAGMA table_info(tools)")).all()}
     assert "requires_credential" in cols
     assert "execution_tier" in cols
+
+
+def test_migration_adds_jwks_json_and_widens_secret_hash_on_postgres(monkeypatch):
+    """Regression: oauth_clients.client_secret_hash is widened to VARCHAR(512)
+    (Fernet tokens are ~184 chars) and jwks_json is added on Postgres."""
+    executed = []
+
+    class _PgDialect:
+        name = "postgresql"
+
+    class _PgEngine:
+        dialect = _PgDialect()
+
+    class _PgSession:
+        def get_bind(self):
+            return _PgEngine()
+
+        def execute(self, stmt):
+            executed.append(str(stmt))
+            return None
+
+        def commit(self):
+            pass
+
+    inspector = _fake_inspector(["client_id", "client_secret_hash", "client_name"])
+    inspector.get_table_names = lambda: ["tools", "oauth_clients", "oauth_auth_codes", "oauth_tokens"]
+
+    def fake_inspect(bind):
+        return inspector
+
+    monkeypatch.setattr("app.migrations.inspect", fake_inspect)
+    run_migrations(_PgSession())
+
+    widen = [e for e in executed if "ALTER COLUMN client_secret_hash" in e]
+    assert any("TYPE VARCHAR(512)" in e for e in widen), executed
+    add_jwks = [e for e in executed if "ADD COLUMN jwks_json" in e]
+    assert add_jwks, executed
+
+
+def test_migration_adds_jwks_json_to_existing_sqlite_clients_table():
+    """SQLite: an existing oauth_clients table (old schema) gains jwks_json."""
+    engine = create_engine("sqlite://")
+    with engine.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE oauth_clients ("
+            "  client_id TEXT PRIMARY KEY,"
+            "  client_secret_hash TEXT,"
+            "  client_name TEXT,"
+            "  redirect_uris_json TEXT,"
+            "  scope TEXT,"
+            "  grant_types_json TEXT,"
+            "  token_endpoint_auth_method TEXT,"
+            "  user_id TEXT,"
+            "  created_at TIMESTAMP"
+            ")"
+        ))
+    with Session(engine) as db:
+        run_migrations(db)
+    with engine.connect() as conn:
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(oauth_clients)")).all()}
+    assert "jwks_json" in cols

@@ -1,7 +1,7 @@
 # Singularity — Deployment Status & Open Problems (resume log)
 
-> Written 2026-09-16. This is the source of truth for where the Render deploy +
-> Claude.ai connector integration stands. Continue from here.
+> Updated 2026-09-17. Source of truth for where the Render deploy + Claude.ai
+> connector integration stands. Continue from here.
 
 ## TL;DR
 
@@ -12,59 +12,26 @@
 - The SDK smoke handshake (`scripts/smoke_oauth.py`) passes end-to-end
   (register → authorize → consent signup → approve → token → initialize →
   tools/list).
-- **BLOCKER: Claude.ai connector cannot register.** Error in Claude.ai UI:
-  *"Couldn't register with Singularity's sign-in service."* (ref `ofid_f35fad5a057c89b6`)
-- Root cause is 2 registration-endpoint failures (see below).
+- **DONE (2026-09-17): the two registration blockers are fixed + new helpers:**
+  - `client_secret_post` 500 **fixed**: the `OAuthClient.client_secret_hash`
+    column was `VARCHAR(128)` — Fernet tokens of a 64-char secret are ~184 chars,
+    so Postgres raised `value too long` → 500 (SQLite ignored the limit, which is
+    why local repros passed). Column widened to `String(512)` + boot migration.
+  - Claude.ai `private_key_jwt` **unblocked**: `app/mcp_auth_ext.py` swaps the
+    SDK's registration/auth handlers so `private_key_jwt` DCR is accepted, the
+    client's public JWKS is stored, and `/token` verifies RFC 7523
+    `client_assertion` JWTs (iss/sub == client_id, aud check, exp enforced).
+    RFC 8414 metadata now advertises `private_key_jwt`.
+  - Settings polish: `valid_scopes=["mcp:tools"]` publishes `scopes_supported`
+    in metadata and rejects out-of-scope DCR requests.
+- **Test suite: 122 passed, 1 warning** (10 new regression/integration tests).
 
 ## Open problems
 
-### P1 — Claude.ai `private_key_jwt` registration is rejected (400)
-- Claude.ai sends `token_endpoint_auth_method: "private_key_jwt"`.
-- The MCP SDK 2.0.0 `RegistrationHandler`
-  (`mcp/server/auth/handlers/register.py:57`) **hard-codes a rejection** of
-  `private_key_jwt` ("token_endpoint_auth_method 'private_key_jwt' is not supported"),
-  because it cannot verify a client assertion (no JWKS storage/verification).
-- Verified live: `POST /register` with `private_key_jwt` → 400.
-- This alone fully explains Claude.ai's failure, since Claude.ai uses
-  private_key_jwt by default.
-
-### P1 — `client_secret_post` registration returns 500 (bug in our provider)
-- Verified live: `POST /register` with `token_endpoint_auth_method:
-  "client_secret_post"` (a normal confidential client) → **500 Internal Server Error**.
-  It should be 201.
-- Suspects to check in `app/mcp_oauth.py:register_client` (line ~112):
-  - `encrypt(client_secret)` may raise on the vault (dev key vs production
-    `SINGULARITY_VAULT_KEY`), or
-  - the `OAuthClient` insert path may fail (e.g. `client_secret_expires_at` /
-    `client_id_issued_at` not persisted — model has no such columns, but that
-    shouldn't crash), or
-  - a NULL/type mismatch on `redirect_uris_json` / `grant_types_json`.
-- This must be fixed regardless — it's a real defect and blocks any confidential
-  client. It may be the *actual* 500 Claude hits if it ever falls back to
-  client_secret_post; check Render logs for the traceback.
-
-### P2 — `private_key_jwt` full support (if we want a clean SDK path)
-Options (unresearched, decide later):
-1. **Custom `/register` route** that wraps the SDK route but rewrites
-   `token_endpoint_auth_method: "private_key_jwt"` → `"client_secret_post"`
-   (downstream: Claude stores the secret and still sends it). Simplest, keeps the
-   201. Risk: Claude may send a `client_assertion` at token time instead of the
-   secret → must also patch the SDK `ClientAuthenticator`, or convince Claude to
-   use the secret (it won't hurt to try storing/returning a secret).
-2. **Fork/vendor the SDK `RegistrationHandler`** and implement real RFC 7523
-   `client_assertion` verification (store JWKS, verify `iss`/`aud`/`exp`) — more
-   work, most correct.
-3. Investigate whether Claude.ai accepts `client_secret_post` if we stop
-   advertising `private_key_jwt`-incompatible metadata; or whether a newer MCP SDK
-   (2.x) removed the hard block. **Check for MCP SDK updates first.**
-
-### P3 — metadata gaps (informational)
-- `/.well-known/oauth-authorization-server` does not advertise `scopes_supported`
-  (SDK omits it; our `valid_scopes` is unset). `required_scopes=["mcp:tools"]`
-  still enforces scope at the resource. Consider setting
-  `ClientRegistrationOptions(valid_scopes=["mcp:tools"])` so metadata advertises it.
-- Also consider `validate_token_resource` (SDK 3.0 will default it True) — set
-  `validate_token_resource=True` now to refuse tokens issued for another resource.
+- **None known for registration.** Real-world Claude.ai E2E still to confirm once
+  this build is deployed (Claude's own `private_key_jwt` flow + redirect UI).
+- P3 (low): `validate_token_resource` is not set (SDK 3.0 will default it True) —
+  consider setting it later.
 
 ## Current state of the codebase
 
@@ -73,18 +40,28 @@ Options (unresearched, decide later):
 - `b5c0312` Phase 4.6 native MCP OAuth (SDK auth server provider)
 - `6619354` docs: Milestone 4.6 plan
 - `db7d371` oauth_public_base auto-derives from RENDER_EXTERNAL_URL
-- `b1c80d0` migrations: read column names from dict rows (Postgres crash fix #1)
-- `e699e15` migrations: pass dtype only, not dtype+colname (crash fix #2)
-- `130da15` migrations: Postgres boolean `DEFAULT false` (crash fix #3)
+- `b1c80d0` migrations: read column names from dict rows
+- `e699e15` migrations: pass dtype only, not dtype+colname
+- `130da15` migrations: Postgres boolean `DEFAULT false`
+- `69eb67a` added STATUS.md + scripts/smoke_oauth.py
 
-### Not yet committed (working tree)
-- `scripts/smoke_oauth.py` — new full OAuth handshake smoke test (works vs live
-  URL).
-- Nothing else outstanding.
+### Uncommitted working tree (2026-09-17)
+- `app/models.py` — `client_secret_hash` → `String(512)`; added `jwks_json`.
+- `app/migrations.py` — widen `client_secret_hash` on Postgres (idempotent);
+  add `oauth_clients.jwks_json`; guard tools ALTERs on table existence.
+- `app/mcp_oauth.py` — persist/load client `jwks` (inline or via `jwks_uri`);
+  `_resolve_jwks` helper.
+- `app/mcp_auth_ext.py` — NEW: private_key_jwt registration + token-auth +
+  metadata advertisement (`install_oauth_extensions()`).
+- `app/mcp_server.py` — `valid_scopes=["mcp:tools"]`; calls
+  `install_oauth_extensions()` before building the /mcp app.
+- `tests/` — RSA/JWKS helpers + 10 new tests (client_secret_post round-trip &
+  full flow, private_key_jwt full flow + bad-signature/aud rejects, metadata,
+  migrations).
 
 ### Test suite
-- `python -m pytest tests/ -q` → **112 passed, 1 warning** (pre-existing
-  Starlette deprecation) as of last run.
+- `python -m pytest tests/ -q` → **122 passed, 1 warning** (pre-existing
+  Starlette deprecation).
 
 ## How to reproduce/verify
 
@@ -92,44 +69,33 @@ Options (unresearched, decide later):
 # full OAuth handshake vs live prod
 python scripts/smoke_oauth.py https://singularity-osd2.onrender.com
 
-# DCR failure repros
+# metadata advertises private_key_jwt + scopes_supported
 python - <<PY
 import httpx
 c = httpx.Client(base_url='https://singularity-osd2.onrender.com', timeout=15)
-print(c.post('/register', json={'client_name':'C',
-  'redirect_uris':['https://claude.ai/api/mcp/auth_callback'],
-  'grant_types':['authorization_code','refresh_token'],
-  'response_types':['code'],
-  'token_endpoint_auth_method':'private_key_jwt'}).status_code)
-print(c.post('/register', json={'client_name':'C',
-  'redirect_uris':['https://claude.ai/api/mcp/auth_callback'],
-  'grant_types':['authorization_code','refresh_token'],
-  'response_types':['code'],
-  'token_endpoint_auth_method':'client_secret_post'}).status_code)
+m = c.get('/.well-known/oauth-authorization-server').json()
+print(m['token_endpoint_auth_methods_supported'])
+print(m['scopes_supported'])
 PY
 ```
 
 ## Next steps (in order)
-1. **Fix the 500 on `client_secret_post`** — reproduce locally with a confidential
-   DCR request, get the traceback, fix `register_client`/vault. Add a regression
-   test (register with client_secret_post → 201 and token exchange works).
-2. **Unblock Claude.ai `private_key_jwt`** — test whether mocking/rewriting to
-   client_secret_post works against Claude.ai; if not, implement proper
-   private_key_jwt support. Check newer MCP SDK first.
-3. Settings polish (optional): add `valid_scopes=["mcp:tools"]` to
-   ClientRegistrationOptions; consider `validate_token_resource=True`.
-4. Commit the P1/P2 fixes + `scripts/smoke_oauth.py`, run full suite, push →
-   Render auto-deploy → re-run live smoke.
-5. Re-publish registry (`npx mcp-publisher@latest publish`) once Claude.ai
+1. Deploy this working tree to Render (commit + push).
+2. Re-run live smoke + confirm Claude.ai connector (Sign in now mode) wraps.
+3. Re-publish registry (`npx mcp-publisher@latest publish`) once Claude.ai
    connects — bump `server.json` version (already 0.3.0).
-6. Re-test Claude.ai connector (Sign in now mode) end-to-end.
+4. (Vision — unstarted) singular MCP endpoint that brokers all registered tools:
+   Tier 1 built-ins (done), Tier 2 hosted remotes (curated catalog exists,
+   execution gated), Tier 3 local stdio → dockerized streamable + auto-connect,
+   OAuth creds stored in DB for reuse, first-connect sign-in enforced.
 
 ## Reference — key files
-- `app/mcp_oauth.py` — `SingularityOAuthProvider` (register_client ~line 112).
-- `app/mcp_server.py` — MCPServer auth wiring, `AuthSettings`.
+- `app/mcp_auth_ext.py` — private_key_jwt registration/token-auth extensions.
+- `app/mcp_oauth.py` — `SingularityOAuthProvider` (register_client, jwks).
+- `app/mcp_server.py` — MCPServer auth wiring, `AuthSettings`, ext install.
+- `app/models.py` / `app/migrations.py` — schema + boot migrations.
 - `app/routers/mcp_auth_pages.py` — consent/sign-in page.
-- `app/migrations.py` — boot-time schema migration (3 Postgres fixes applied).
-- `scripts/smoke_oauth.py` — live handshake tester (uncommitted).
+- `scripts/smoke_oauth.py` — live handshake tester.
 - `tests/test_mcp_oauth.py`, `tests/oauth_helpers.py` — OAuth integration tests.
-- SDK: `mcp/server/auth/handlers/register.py` (private_key_jwt block at :57),
-  `mcp/server/auth/settings.py` (ClientRegistrationOptions/valid_scopes).
+- SDK: `mcp/server/auth/routes.py` (patched names),
+  `mcp/server/auth/handlers/register.py`.

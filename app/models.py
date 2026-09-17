@@ -161,12 +161,18 @@ class OAuthClient(Base):
     __tablename__ = "oauth_clients"
 
     client_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    client_secret_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Fernet-encrypted client secrets are ~184 chars for a 64-char secret; keep
+    # headroom so Postgres (which enforces VARCHAR length, unlike SQLite) accepts
+    # them. Postgres-only, boot-migrated from VARCHAR(128) — see app/migrations.py.
+    client_secret_hash: Mapped[str | None] = mapped_column(String(512), nullable=True)
     client_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     redirect_uris_json: Mapped[str | None] = mapped_column(Text)
     scope: Mapped[str | None] = mapped_column(String(500), nullable=True)
     grant_types_json: Mapped[str | None] = mapped_column(Text)
     token_endpoint_auth_method: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # public JWKS (JSON) the client presented via DCR (private_key_jwt auth) —
+    # lets the token endpoint verify `client_assertion` JWTs offline.
+    jwks_json: Mapped[str | None] = mapped_column(Text)
     user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 

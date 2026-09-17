@@ -312,3 +312,277 @@ def test_consent_wrong_password_returns_401(client):
     })
     resp = client.post("/mcp-auth/consent", data=form2)
     assert resp.status_code == 401
+
+
+# --- client_secret_post (the Render 500 regression) ------------------------
+
+def test_register_client_secret_post_mints_secret(client):
+    """client_secret_post registration succeeds and mints a secret (was a 500 on
+    Postgres: the Fernet token exceeds the OLD VARCHAR(128) column)."""
+    from oauth_helpers import register_secret_client
+
+    body = register_secret_client(client)
+    assert body["token_endpoint_auth_method"] == "client_secret_post"
+    assert body["client_secret"]
+    assert len(body["client_secret"]) == 64
+
+
+def test_client_secret_round_trips_through_get_client(client):
+    """The Fernet-encrypted secret must survive storage and decrypt on read
+    (regression: column was too short to hold a Fernet token on Postgres)."""
+    import asyncio
+
+    from oauth_helpers import register_secret_client
+    from app.mcp_oauth import SingularityOAuthProvider
+
+    body = register_secret_client(client)
+    provider = SingularityOAuthProvider()
+    loaded = asyncio.run(provider.get_client(body["client_id"]))
+    assert loaded is not None
+    assert loaded.client_secret == body["client_secret"]
+
+
+def test_full_oauth_flow_with_client_secret_post(client):
+    """Full consent flow where /token authenticates with client_secret_post."""
+    import urllib.parse
+
+    from oauth_helpers import pkce, register_secret_client
+
+    body = register_secret_client(client)
+    client_id = body["client_id"]
+    client_secret = body["client_secret"]
+    verifier, challenge = pkce()
+
+    resp = client.get("/authorize", params={
+        "response_type": "code",
+        "client_id": client_id,
+        "redirect_uri": "http://testserver/callback",
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+        "state": "cs-v1",
+        "scope": "mcp:tools",
+    }, follow_redirects=False)
+    consent_url = resp.headers["location"]
+    client.get(consent_url)
+
+    parsed = urllib.parse.urlparse(consent_url)
+    qs = urllib.parse.parse_qs(parsed.query)
+    form = {k: v[0] for k, v in qs.items()}
+    form.update({
+        "signup": "1",
+        "email": f"csp-{secrets.token_hex(6)}@example.com",
+        "password": "csp-Pass1!",
+    })
+    client.post("/mcp-auth/consent", data=form)
+    form["approve"] = "1"
+    resp = client.post("/mcp-auth/consent", data=form, follow_redirects=False)
+    code = urllib.parse.parse_qs(urllib.parse.urlparse(resp.headers["location"]).query)["code"][0]
+
+    # Success path: client authenticates WITH its minted secret.
+    resp = client.post("/token", data={
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": "http://testserver/callback",
+        "client_id": client_id,
+        "code_verifier": verifier,
+        "client_secret": client_secret,
+    })
+    assert resp.status_code == 200, resp.text
+
+    # A wrong secret must be rejected (401), proving the secret is actually checked.
+    resp = client.post("/token", data={
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": "http://testserver/callback",
+        "client_id": client_id,
+        "code_verifier": verifier,
+        "client_secret": "wrong-secret-value",
+    })
+    assert resp.status_code == 401, resp.text
+
+
+# --- private_key_jwt (Claude.ai DCR) ----------------------------------------
+
+def test_metadata_advertises_private_key_jwt(client):
+    """RFC 8414 metadata lists private_key_jwt as a supported auth method."""
+    body = client.get("/.well-known/oauth-authorization-server").json()
+    assert "private_key_jwt" in body["token_endpoint_auth_methods_supported"]
+
+
+def test_metadata_scopes_supported(client):
+    """valid_scopes publishes scopes_supported in the RFC 8414 metadata."""
+    body = client.get("/.well-known/oauth-authorization-server").json()
+    assert body["scopes_supported"] == ["mcp:tools"]
+
+
+def test_register_private_key_jwt_client(client):
+    """A private_key_jwt client registers with its JWKS, no secret minted."""
+    from oauth_helpers import rsa_client_keypair
+
+    private_pem, jwks = rsa_client_keypair()
+    resp = client.post("/register", json={
+        "redirect_uris": ["http://testserver/callback"],
+        "client_name": "claude-pytest",
+        "token_endpoint_auth_method": "private_key_jwt",
+        "jwks": jwks,
+        "grant_types": ["authorization_code", "refresh_token"],
+        "response_types": ["code"],
+        "scope": "mcp:tools",
+    })
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["token_endpoint_auth_method"] == "private_key_jwt"
+    assert body.get("client_secret") is None
+
+
+def test_registration_rejects_out_of_scope_scopes(client):
+    """DCR scope must be within valid_scopes (mcp:tools)."""
+    resp = client.post("/register", json={
+        "redirect_uris": ["http://testserver/callback"],
+        "client_name": "scope-abuser",
+        "token_endpoint_auth_method": "none",
+        "scope": "mcp:tools admin:*",
+    })
+    assert resp.status_code == 400
+    assert resp.json()["error"] == "invalid_client_metadata"
+
+
+def test_private_key_jwt_full_flow(client):
+    """Full OAuth flow where /token authenticates via an RFC 7523 assertion."""
+    import urllib.parse
+
+    from oauth_helpers import pkce, rsa_client_keypair, sign_client_assertion
+
+    private_pem, jwks = rsa_client_keypair()
+    resp = client.post("/register", json={
+        "redirect_uris": ["http://testserver/callback"],
+        "client_name": "claude-pytest",
+        "token_endpoint_auth_method": "private_key_jwt",
+        "jwks": jwks,
+        "grant_types": ["authorization_code", "refresh_token"],
+        "response_types": ["code"],
+        "scope": "mcp:tools",
+    })
+    assert resp.status_code == 201, resp.text
+    client_id = resp.json()["client_id"]
+    verifier, challenge = pkce()
+
+    resp = client.get("/authorize", params={
+        "response_type": "code",
+        "client_id": client_id,
+        "redirect_uri": "http://testserver/callback",
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+        "state": "pk-v1",
+        "scope": "mcp:tools",
+    }, follow_redirects=False)
+    consent_url = resp.headers["location"]
+    client.get(consent_url)
+
+    parsed = urllib.parse.urlparse(consent_url)
+    qs = urllib.parse.parse_qs(parsed.query)
+    form = {k: v[0] for k, v in qs.items()}
+    form.update({
+        "signup": "1",
+        "email": f"pkjwt-{secrets.token_hex(6)}@example.com",
+        "password": "pkjwt-Pass1!",
+    })
+    client.post("/mcp-auth/consent", data=form)
+    form["approve"] = "1"
+    resp = client.post("/mcp-auth/consent", data=form, follow_redirects=False)
+    code = urllib.parse.parse_qs(urllib.parse.urlparse(resp.headers["location"]).query)["code"][0]
+
+    assertion = sign_client_assertion(client_id, private_pem, jwks)
+    resp = client.post("/token", data={
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": "http://testserver/callback",
+        "client_id": client_id,
+        "code_verifier": verifier,
+        "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+        "client_assertion": assertion,
+    })
+    assert resp.status_code == 200, resp.text
+    access_token = resp.json()["access_token"]
+
+    resp = client.post(
+        "/mcp",
+        json=_rpc("initialize", INITIALIZE),
+        headers={**HEADERS, "Authorization": f"Bearer {access_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert _parse(resp)["result"]["serverInfo"]["name"] == "singularity"
+
+
+def test_private_key_jwt_bad_signature_rejected(client):
+    """A client_assertion signed by the wrong key is rejected with 401."""
+    import urllib.parse
+
+    from oauth_helpers import pkce, rsa_client_keypair, sign_client_assertion
+
+    # Register client with keypair A, but sign the assertion with a different key
+    private_pem, jwks = rsa_client_keypair(kid="key-a")
+    other_pem, _other_jwks = rsa_client_keypair(kid="key-b")
+
+    resp = client.post("/register", json={
+        "redirect_uris": ["http://testserver/callback"],
+        "client_name": "claude-pytest-bad",
+        "token_endpoint_auth_method": "private_key_jwt",
+        "jwks": jwks,
+        "grant_types": ["authorization_code", "refresh_token"],
+        "response_types": ["code"],
+        "scope": "mcp:tools",
+    })
+    assert resp.status_code == 201, resp.text
+    client_id = resp.json()["client_id"]
+    verifier, challenge = pkce()
+
+    resp = client.get("/authorize", params={
+        "response_type": "code",
+        "client_id": client_id,
+        "redirect_uri": "http://testserver/callback",
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+        "state": "pk-bad",
+        "scope": "mcp:tools",
+    }, follow_redirects=False)
+    consent_url = resp.headers["location"]
+    client.get(consent_url)
+    parsed = urllib.parse.urlparse(consent_url)
+    qs = urllib.parse.parse_qs(parsed.query)
+    form = {k: v[0] for k, v in qs.items()}
+    form.update({
+        "signup": "1",
+        "email": f"pkjwt-bad-{secrets.token_hex(6)}@example.com",
+        "password": "pkjwt-Pass1!",
+    })
+    client.post("/mcp-auth/consent", data=form)
+    form["approve"] = "1"
+    resp = client.post("/mcp-auth/consent", data=form, follow_redirects=False)
+    code = urllib.parse.parse_qs(urllib.parse.urlparse(resp.headers["location"]).query)["code"][0]
+
+    # Sign with the WRONG key (key-b) while client registered key-a
+    assertion = sign_client_assertion(client_id, other_pem, _other_jwks, kid="key-b")
+    resp = client.post("/token", data={
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": "http://testserver/callback",
+        "client_id": client_id,
+        "code_verifier": verifier,
+        "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+        "client_assertion": assertion,
+    })
+    assert resp.status_code == 401, resp.text
+
+    # Also verify an assertion with a valid signature but wrong audience is rejected
+    good_assertion = sign_client_assertion(client_id, private_pem, jwks, audience="https://evil.example/token")
+    resp = client.post("/token", data={
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": "http://testserver/callback",
+        "client_id": client_id,
+        "code_verifier": verifier,
+        "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+        "client_assertion": good_assertion,
+    })
+    assert resp.status_code == 401, resp.text
