@@ -29,7 +29,7 @@
       "permissions_requested": ["channels:read", "chat:write", "users:read"],
       "permissions_needed": ["channels:read", "chat:write", "users:read"],
       "trust_score": 0.92,
-      "execution_tier": "local",
+      "execution_tier": "hosted",
       "requires_credential": true
     },
     {

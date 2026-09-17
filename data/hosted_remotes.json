@@ -32,8 +32,9 @@
     "remote_url": "https://waystation.ai/slack/mcp",
     "host": "waystation.ai",
     "server_name": "Slack MCP via WayStation",
-    "server_description": "Slack MCP server hosted on WayStation. Requires Slack OAuth token.",
+    "server_description": "DEPRECATED — WayStation returns 402 DEPLOYMENT_DISABLED (host-side); replaced by the first-party Slack REST provider (app/providers/slack_mcp.py).",
     "auth_required": true,
-    "tier": "hosted"
+    "tier": "hosted",
+    "deprecated": true
   }
 }

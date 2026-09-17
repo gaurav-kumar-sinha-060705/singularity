@@ -33,7 +33,11 @@
   (alive, `sk_…` bearer), `notion-mcp` 401 (alive, `secret_…` bearer),
   `slack-mcp` 402 *Payment required / DEPLOYMENT_DISABLED* (unusable today),
   github-mcp (smithery) 404 dead.
-- **Test suite: 153 passed, 1 warning** (8 dashboard/verify + 23 github tests).
+- `slack-mcp` 402 *Payment required / DEPLOYMENT_DISABLED* → **also went
+  first-party**: `app/providers/slack_mcp.py` (Slack Web API via stored
+  xoxb-/xoxp- token; auth.test probe; actions get_workspace_info/list_channels/
+  list_messages/post_message/list_users/search_messages).
+- **Test suite: 176 passed, 1 warning** (8 dashboard + 23 github + 23 slack).
 
 ## Open problems
 
@@ -58,20 +62,16 @@
 - `69eb67a` added STATUS.md + scripts/smoke_oauth.py
 
 ### Uncommitted working tree (2026-09-17)
-- `app/providers/github.py` — NEW first-party GitHub REST provider (slug
-  `github-mcp`, 7 actions, bearer/PAT via vault, `_async_list_tools` probe for
-  dashboard verify). Replaces dead Smithery remote.
-- `app/providers/registry.py` — register github.provider; skip deprecated
-  catalog entries.
-- `data/hosted_remotes.json` — github-mcp entry marked deprecated (kept as the
-  record of why).
-- `data/seed_tools.json` — github-mcp execution_tier "local" → "hosted" (shows
-  on the connect dashboard).
-- `tests/test_github.py` — 23 tests (validate shapes, actions, masked token,
-  api errors, gateway allowed/no-cred, verify ok/bad-token/400).
+- `app/providers/slack_mcp.py` — NEW first-party Slack REST provider (slug
+  slack-mcp, 6 actions, xoxb-/xoxp- token via vault, auth.test verify probe).
+  Replaces WayStation remote (402 DEPLOYMENT_DISABLED).
+- `app/providers/registry.py` — register slack_mcp.provider.
+- `data/hosted_remotes.json` — slack-mcp marked deprecated (why it is gone).
+- `data/seed_tools.json` — slack-mcp execution_tier -> hosted.
+- `tests/test_slack_mcp.py` — 23 tests.
 
 ### Test suite
-- `python -m pytest tests/ -q` → **153 passed, 1 warning** (pre-existing
+- `python -m pytest tests/ -q` → **176 passed, 1 warning** (pre-existing
   Starlette deprecation).
 
 ## How to reproduce/verify

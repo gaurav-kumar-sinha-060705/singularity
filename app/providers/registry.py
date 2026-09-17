@@ -2,7 +2,7 @@ import json
 import shutil
 from pathlib import Path
 
-from app.providers import github, npms_lookup, pypi_lookup, weather, web_search
+from app.providers import github, npms_lookup, pypi_lookup, slack_mcp, weather, web_search
 from app.providers.base import Provider
 from app.providers.remote import RemoteMcpProvider
 from app.providers.stdio import ALLOWLISTED_STDIO, StdioMcpProvider
@@ -41,6 +41,7 @@ _PROVIDERS: dict[str, Provider] = {
         pypi_lookup.provider,
         web_search.provider,
         github.provider,
+        slack_mcp.provider,
     )
 }
 
