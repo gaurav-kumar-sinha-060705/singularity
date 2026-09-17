@@ -63,6 +63,12 @@ def test_root_redirects_to_dashboard(client):
     assert urlparse(resp.headers["location"]).path == "/dashboard"
 
 
+def test_connections_alias_redirects_to_dashboard(client):
+    resp = client.get("/connections", follow_redirects=False)
+    assert resp.status_code == 302
+    assert urlparse(resp.headers["location"]).path == "/dashboard"
+
+
 # ── Helper: signup + store a credential ─────────────────────────────────────
 
 def _signup_and_store(client, slug="stripe-mcp", email=None, password="hunter2hunter"):

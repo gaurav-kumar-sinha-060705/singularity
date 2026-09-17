@@ -24,6 +24,11 @@ def dashboard_page() -> HTMLResponse:
     )
 
 
+@router.get("/connections", response_class=RedirectResponse, include_in_schema=False)
+def connections() -> RedirectResponse:
+    return RedirectResponse("/dashboard", status_code=302)
+
+
 @router.get("/", response_class=RedirectResponse, include_in_schema=False)
 def root() -> RedirectResponse:
     return RedirectResponse("/dashboard", status_code=302)
