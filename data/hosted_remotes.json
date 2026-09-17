@@ -22,9 +22,10 @@
     "remote_url": "https://server.smithery.ai/@smithery-ai/github-mcp",
     "host": "server.smithery.ai",
     "server_name": "GitHub MCP via Smithery",
-    "server_description": "GitHub MCP server hosted on Smithery. Requires GitHub token.",
+    "server_description": "DEPRECATED — Smithery endpoint returns 404; replaced by the first-party GitHub REST provider (app/providers/github.py).",
     "auth_required": true,
-    "tier": "hosted"
+    "tier": "hosted",
+    "deprecated": true
   },
   "slack-mcp": {
     "slug": "slack-mcp",

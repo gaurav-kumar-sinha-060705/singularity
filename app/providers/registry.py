@@ -2,7 +2,7 @@ import json
 import shutil
 from pathlib import Path
 
-from app.providers import npms_lookup, pypi_lookup, weather, web_search
+from app.providers import github, npms_lookup, pypi_lookup, weather, web_search
 from app.providers.base import Provider
 from app.providers.remote import RemoteMcpProvider
 from app.providers.stdio import ALLOWLISTED_STDIO, StdioMcpProvider
@@ -17,6 +17,8 @@ def _load_remote_catalog() -> list[RemoteMcpProvider]:
     data = json.loads(_HOSTED_REMOTES_PATH.read_text(encoding="utf-8"))
     providers = []
     for entry in data.values():
+        if entry.get("deprecated"):
+            continue
         providers.append(RemoteMcpProvider(
             slug=entry["slug"],
             name=entry.get("server_name", entry["slug"]),
@@ -38,6 +40,7 @@ _PROVIDERS: dict[str, Provider] = {
         npms_lookup.provider,
         pypi_lookup.provider,
         web_search.provider,
+        github.provider,
     )
 }
 

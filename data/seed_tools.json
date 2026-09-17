@@ -13,7 +13,7 @@
       "permissions_requested": ["repo:read", "repo:write", "issues:read", "issues:write", "pull_requests:write"],
       "permissions_needed": ["repo:read", "issues:read", "issues:write"],
       "trust_score": 0.9,
-      "execution_tier": "local",
+      "execution_tier": "hosted",
       "requires_credential": true
     },
     {

@@ -24,7 +24,16 @@
   - `GET /api/v1/connections/{slug}/verify` — decrypt vault credential → build
     auth headers → initialize + tools/list against the hosted remote; 200 =
     `call_tool(slug, …)` will authenticate. Audited (`connection_verified`).
-- **Test suite: 130 passed, 1 warning** (8 new dashboard/verify tests).
+- **NEW (2026-09-17): github-mcp went first-party.** The Smithery endpoint
+  (`server.smithery.ai/@smithery-ai/github-mcp`) returns 404 dead and Smithery's
+  auth model never accepted a plain GitHub PAT. `app/providers/github.py` is now
+  a Tier 1 GitHub REST bridge (repo search/read, issues, gists, star) that runs
+  with just a stored PAT via the same audited gateway; dashboard verify probes
+  `GET /user`. **Tier 2 live probe (init handshake):** `stripe-mcp` 401
+  (alive, `sk_…` bearer), `notion-mcp` 401 (alive, `secret_…` bearer),
+  `slack-mcp` 402 *Payment required / DEPLOYMENT_DISABLED* (unusable today),
+  github-mcp (smithery) 404 dead.
+- **Test suite: 153 passed, 1 warning** (8 dashboard/verify + 23 github tests).
 
 ## Open problems
 
@@ -49,17 +58,20 @@
 - `69eb67a` added STATUS.md + scripts/smoke_oauth.py
 
 ### Uncommitted working tree (2026-09-17)
-- `app/routers/connections.py` — NEW `GET /{provider_slug}/verify`: decrypt
-  vault credential → probe remote MCP (initialize + tools/list) → tool count.
-- `app/static/dashboard.html` — NEW connect page (sign-in, OAuth or API-key
-  connect, verify, Claude call guidance, same-account note).
-- `app/routers/dashboard.py` — NEW: serves `/dashboard` + `/` redirect.
-- `app/main.py` — include dashboard router before the /mcp mount.
-- `tests/test_dashboard_verify.py` — 8 tests (page, redirect, verify
-  success/400/404/502/401/501).
+- `app/providers/github.py` — NEW first-party GitHub REST provider (slug
+  `github-mcp`, 7 actions, bearer/PAT via vault, `_async_list_tools` probe for
+  dashboard verify). Replaces dead Smithery remote.
+- `app/providers/registry.py` — register github.provider; skip deprecated
+  catalog entries.
+- `data/hosted_remotes.json` — github-mcp entry marked deprecated (kept as the
+  record of why).
+- `data/seed_tools.json` — github-mcp execution_tier "local" → "hosted" (shows
+  on the connect dashboard).
+- `tests/test_github.py` — 23 tests (validate shapes, actions, masked token,
+  api errors, gateway allowed/no-cred, verify ok/bad-token/400).
 
 ### Test suite
-- `python -m pytest tests/ -q` → **130 passed, 1 warning** (pre-existing
+- `python -m pytest tests/ -q` → **153 passed, 1 warning** (pre-existing
   Starlette deprecation).
 
 ## How to reproduce/verify
