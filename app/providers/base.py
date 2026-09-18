@@ -72,6 +72,17 @@ class Provider:
                 "error": f"{type(exc).__name__}: {exc}",
                 "latency_ms": int((time.monotonic() - t0) * 1000),
             }
+        except BaseExceptionGroup as exc:  # anyio wraps SDK failures in a group
+            detail = exc
+            while isinstance(detail, BaseExceptionGroup):
+                detail = detail.exceptions[0] if detail.exceptions else detail
+            return {
+                "ok": False,
+                "name": self.slug,
+                "version": self.version,
+                "error": f"{type(detail).__name__}: {detail}",
+                "latency_ms": int((time.monotonic() - t0) * 1000),
+            }
 
 
 def http_get_json(url: str, params: dict | None = None,

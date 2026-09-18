@@ -179,6 +179,39 @@ def test_browserbase_allowlisted(monkeypatch):
     assert provider.validate({"tool": "navigate", "arguments": {}}) is not None
 
 
+def test_remote_exception_group_flattened_to_real_error(monkeypatch):
+    """anyio wraps SDK failures in ExceptionGroup (shown by Claude as the
+    useless "task group errors"); run() must peel to the real MCPError message."""
+    from mcp.shared.exceptions import MCPError
+
+    class _AsyncCM:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def initialize(self):
+            err = MCPError(-32603, "Notion rejected the call", data="scope")
+            raise ExceptionGroup("task group failed", [err])
+
+    @asynccontextmanager
+    async def fake_open_session(url, headers=None):
+        yield _AsyncCM()
+
+    monkeypatch.setattr("app.providers.remote.open_session", fake_open_session)
+
+    provider = RemoteMcpProvider(
+        slug="notion-mcp", name="Notion", remote_url="https://mcp.notion.com/mcp",
+        description="d", auth_required=False,
+    )
+    out = provider.run({"tool": "search", "arguments": {}}, "public:read",
+                       credential={"api_key": "secret_abc"})
+    assert out["ok"] is False
+    assert "Notion rejected the call" in out["error"], out
+    assert "task group" not in out["error"].lower()
+
+
 def test_list_public_tools_tiers_and_hints():
     by_slug = {t["slug"]: t for t in registry.list_public_tools()}
     assert by_slug["github-mcp"]["tier"] == "tier1"

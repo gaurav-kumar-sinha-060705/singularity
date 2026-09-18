@@ -30,6 +30,16 @@ from app.config import get_settings
 from app.providers.base import Provider, ProviderError
 
 
+def _flatten(exc: BaseException) -> BaseException:
+    """anyio/MCP wrap transport failures in nested ExceptionGroups; peel down to
+    the innermost real cause so callers see e.g. `MCPError: ...` instead of the
+    generic "unhandled errors in a TaskGroup"."""
+    while isinstance(exc, BaseExceptionGroup):
+        children = exc.exceptions
+        exc = children[0] if children else exc
+    return exc
+
+
 @asynccontextmanager
 async def open_session(remote_url: str, headers: dict[str, str] | None = None):
     """Async context manager yielding a connected MCP ClientSession.
@@ -211,6 +221,8 @@ class RemoteMcpProvider(Provider):
             )
         except asyncio.TimeoutError as exc:
             raise ProviderError(f"remote MCP call timed out: {exc}") from exc
+        except BaseException as exc:  # incl. anyio ExceptionGroup from the SDK
+            raise ProviderError(f"remote MCP call failed: {_flatten(exc)}") from exc
         return {
             "remote_url": self.remote_url,
             "tool": tool,

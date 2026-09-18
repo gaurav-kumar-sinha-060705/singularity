@@ -167,6 +167,13 @@ def verify_connection(
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, f"verification failed against remote MCP: {exc}"
         ) from exc
+    except BaseExceptionGroup as exc:  # anyio wraps SDK failures in a group
+        detail = exc
+        while isinstance(detail, BaseExceptionGroup):
+            detail = detail.exceptions[0] if detail.exceptions else detail
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, f"verification failed against remote MCP: {type(detail).__name__}: {detail}"
+        ) from exc
 
     log_event(db, "connection_verified", channel="rest", user_id=user.id, provider=provider_slug)
     db.commit()
