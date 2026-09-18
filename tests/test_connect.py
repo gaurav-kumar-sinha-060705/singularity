@@ -147,6 +147,8 @@ def test_exchange_token(monkeypatch):
     try:
         monkeypatch.setattr(moa, "_http_get", lambda url, headers=None, timeout=10: _META)
         monkeypatch.setattr(moa, "_http_post",
+                            lambda url, payload, headers=None, timeout=10: {"client_id": "sg-1", "client_secret": None})
+        monkeypatch.setattr(moa, "_http_post_form",
                             lambda url, payload, headers=None, timeout=10: {
                                 "access_token": "tok-1",
                                 "refresh_token": "ref-1",
@@ -161,12 +163,70 @@ def test_exchange_token(monkeypatch):
         db.close()
 
 
+def test_exchange_token_posts_form_with_client_secret_when_needed(monkeypatch):
+    """Token-endpoint bodies are form-encoded (RFC 6749), and when the AS
+    registered us with client_secret_post the secret rides in the form body —
+    Notion/Stripe-style ASes 4xx on JSON bodies with client auth."""
+    db = SessionLocal()
+    try:
+        db.query(RemoteOAuthClient).filter_by(slug="stripe-mcp").delete()
+        db.commit()
+        sent = {}
+
+        meta_post = {
+            "issuer": "https://access.stripe.com/mcp",
+            "authorization_endpoint": "https://access.stripe.com/mcp/oauth2/authorize",
+            "token_endpoint": "https://access.stripe.com/mcp/oauth2/token",
+            "registration_endpoint": "https://access.stripe.com/mcp/oauth2/register",
+            "code_challenge_methods_supported": ["S256"],
+            "token_endpoint_auth_methods_supported": ["client_secret_post"],
+            "grant_types_supported": ["authorization_code", "refresh_token"],
+        }
+
+        monkeypatch.setattr(moa, "_http_get", lambda url, headers=None, timeout=10: meta_post)
+        monkeypatch.setattr(moa, "_http_post",
+                            lambda url, payload, headers=None, timeout=10: {"client_id": "sg-secret-1", "client_secret": "s3cret"})
+
+        def fake_token(url, payload, headers=None, timeout=10):
+            sent.update(url=url, payload=payload, headers=headers or {})
+            return {"access_token": "tok-1", "refresh_token": "ref-1", "expires_in": 3600}
+
+        monkeypatch.setattr(moa, "_http_post_form", fake_token)
+
+        moa._clear_discovery_cache()
+        cap = get_capability("stripe-mcp")
+        moa.register_client(cap, db)
+        row = db.query(RemoteOAuthClient).filter_by(slug="stripe-mcp").first()
+        assert row.token_auth_method == "client_secret_post"
+
+        data = moa.exchange_token(cap, "code-z", "V" * 43, db)
+        assert data["access_token"] == "tok-1"
+        assert sent["url"] == meta_post["token_endpoint"]
+        assert sent["headers"]["Content-Type"] == "application/x-www-form-urlencoded"
+        assert "Authorization" not in sent["headers"]
+        assert sent["payload"]["client_secret"] == "s3cret"
+        assert sent["payload"]["code_verifier"] == "V" * 43
+        assert sent["payload"]["client_id"] == "sg-secret-1"
+
+        # refresh re-authenticates the same way
+        sent.clear()
+        stale = {"access_token": "tok-1", "refresh_token": "ref-1", "expires_at": time.time() - 1}
+        out = moa.refresh_if_needed(cap, stale, db)
+        assert out["access_token"] == "tok-1"
+        assert sent["payload"]["grant_type"] == "refresh_token"
+        assert sent["payload"]["client_secret"] == "s3cret"
+    finally:
+        db.close()
+
+
 def test_refresh_only_when_near_expiry(monkeypatch):
     db = SessionLocal()
     try:
         calls = []
         monkeypatch.setattr(moa, "_http_get", lambda url, headers=None, timeout=10: _META)
         monkeypatch.setattr(moa, "_http_post",
+                            lambda url, payload, headers=None, timeout=10: {"client_id": "sg-1", "client_secret": None})
+        monkeypatch.setattr(moa, "_http_post_form",
                             lambda url, payload, headers=None, timeout=10: calls.append(payload) or {
                                 "access_token": "tok-new",
                                 "refresh_token": "ref-new",
@@ -192,8 +252,9 @@ def test_refresh_dispatch_swallows_failures(monkeypatch):
     try:
         monkeypatch.setattr(moa, "_http_get", lambda url, headers=None, timeout=10: _META)
         monkeypatch.setattr(moa, "_http_post",
-                            lambda url, payload, headers=None, timeout=10: (_ for _ in ()).throw(
-                                moa.RegistrationError("HTTP 400")) if False else _raise_400())
+                            lambda url, payload, headers=None, timeout=10: {"client_id": "sg-1", "client_secret": None})
+        monkeypatch.setattr(moa, "_http_post_form",
+                            lambda url, payload, headers=None, timeout=10: _raise_400())
         moa.register_client(get_capability("stripe-mcp"), db)
         stale = {"auth_method": "mcp_oauth", "access_token": "tok-1",
                  "refresh_token": "ref-1", "expires_at": time.time() - 1}
@@ -269,6 +330,7 @@ def test_start_and_callback_mcp_oauth_end_to_end(client, monkeypatch):
 
     monkeypatch.setattr(moa, "_http_get", fake_get)
     monkeypatch.setattr(moa, "_http_post", fake_post)
+    monkeypatch.setattr(moa, "_http_post_form", fake_post)
 
     token, email = _signup(client, "mcp")
     from app.database import SessionLocal

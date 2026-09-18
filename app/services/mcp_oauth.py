@@ -100,6 +100,32 @@ def _http_post(url: str, payload: dict, headers: Optional[dict] = None, timeout:
         raise RegistrationError(f"{url}: {exc}") from exc
 
 
+def _http_post_form(url: str, data: dict, headers: Optional[dict] = None, timeout: int = 10) -> dict:
+    """OAuth token-endpoint request: RFC 6749 bodies are application/x-www-
+    form-urlencoded. JSON bodies 4xx against real ASes (e.g. Notion's
+    Cloudflare workers-oauth-provider), so token exchange/refresh use form."""
+    body = urlencode(data).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+            "User-Agent": "SingularityOAuth/1.0",
+            **(headers or {}),
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8")
+            return json.loads(raw) if raw.strip() else {}
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        raise RegistrationError(f"{url}: HTTP {exc.code}: {raw}") from exc
+    except Exception as exc:
+        raise RegistrationError(f"{url}: {exc}") from exc
+
+
 # ---------------------------------------------------------------------------
 # Discovery cache
 # ---------------------------------------------------------------------------
@@ -187,12 +213,13 @@ def register_client(cap: OAuthCapability, db: Session) -> tuple[str, str | None]
 
     meta = discover(cap)
     redirect_uri = f"{get_settings().oauth_public_base}/api/v1/auth/{cap.slug}/callback"
+    auth_method = _pick_auth_method(meta.token_endpoint_auth_methods_supported)
     payload: dict = {
         "client_name": f"Singularity Gateway ({cap.name or cap.slug})",
         "redirect_uris": [redirect_uri],
         "grant_types": ["authorization_code", "refresh_token"],
         "response_types": ["code"],
-        "token_endpoint_auth_method": _pick_auth_method(meta.token_endpoint_auth_methods_supported),
+        "token_endpoint_auth_method": auth_method,
     }
     if cap.resource:
         payload["resource"] = cap.resource
@@ -210,6 +237,7 @@ def register_client(cap: OAuthCapability, db: Session) -> tuple[str, str | None]
         slug=cap.slug,
         client_id=client_id,
         client_secret=encrypt(client_secret_raw) if client_secret_raw else None,
+        token_auth_method=auth_method,
         registration_json=json.dumps(result),
     )
     db.add(row)
@@ -261,6 +289,30 @@ def authorize_url(cap: OAuthCapability, client_id: str, verifier: str, state: st
 # Token exchange
 # ---------------------------------------------------------------------------
 
+def _effective_auth_method(client: RemoteOAuthClient) -> str:
+    if client.token_auth_method:
+        return client.token_auth_method
+    return "client_secret_post" if client.client_secret else "none"
+
+
+def _token_request(
+    client: RemoteOAuthClient, secret: str | None, base: dict
+) -> tuple[dict, dict]:
+    """Headers + body (form-encoded) for a token-endpoint call, authenticated the
+    way the client was registered: none, client_secret_post (form field) or
+    client_secret_basic (Basic header)."""
+    method = _effective_auth_method(client)
+    headers = {"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"}
+    data = dict(base)
+    if secret:
+        if method == "client_secret_basic":
+            creds = base64.b64encode(f"{client.client_id}:{secret}".encode()).decode()
+            headers["Authorization"] = f"Basic {creds}"
+        elif method == "client_secret_post":
+            data["client_secret"] = secret
+    return headers, data
+
+
 def exchange_token(cap: OAuthCapability, code: str, verifier: str, db: Session) -> dict:
     meta = discover(cap)
     client = get_client_registration(db, cap.slug)
@@ -269,19 +321,14 @@ def exchange_token(cap: OAuthCapability, code: str, verifier: str, db: Session) 
 
     redirect_uri = f"{get_settings().oauth_public_base}/api/v1/auth/{cap.slug}/callback"
     secret = decrypt(client.client_secret) if client.client_secret else None
-
-    payload = {
+    headers, payload = _token_request(client, secret, {
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": redirect_uri,
         "code_verifier": verifier,
         "client_id": client.client_id,
-    }
-    headers: dict = {}
-    if secret:
-        creds = base64.b64encode(f"{client.client_id}:{secret}".encode()).decode()
-        headers["Authorization"] = f"Basic {creds}"
-    token_data = _http_post(meta.token_endpoint, payload, headers=headers)
+    })
+    token_data = _http_post_form(meta.token_endpoint, payload, headers=headers)
     if "access_token" not in token_data:
         raise RegistrationError(f"token exchange failed: {token_data}")
     now = time.time()
@@ -309,18 +356,14 @@ def refresh_if_needed(cap: OAuthCapability, credential: dict, db: Session) -> di
 
     meta = discover(cap)
     secret = decrypt(client.client_secret) if client.client_secret else None
-    payload: dict = {
+    headers, payload = _token_request(client, secret, {
         "grant_type": "refresh_token",
         "refresh_token": refresh_token,
         "client_id": client.client_id,
-    }
-    headers: dict = {}
-    if secret:
-        creds = base64.b64encode(f"{client.client_id}:{secret}".encode()).decode()
-        headers["Authorization"] = f"Basic {creds}"
+    })
 
     try:
-        token_data = _http_post(meta.token_endpoint, payload, headers=headers)
+        token_data = _http_post_form(meta.token_endpoint, payload, headers=headers)
     except RegistrationError:
         raise OAuthRefreshError("refresh failed")
     if "access_token" not in token_data:

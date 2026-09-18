@@ -175,6 +175,7 @@ class RemoteOAuthClient(Base):
     slug: Mapped[str] = mapped_column(String(120), primary_key=True)
     client_id: Mapped[str] = mapped_column(String(512))
     client_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    token_auth_method: Mapped[str | None] = mapped_column(String(32), nullable=True)
     registration_json: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

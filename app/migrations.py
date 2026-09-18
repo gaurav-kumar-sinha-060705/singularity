@@ -88,3 +88,14 @@ def run(db: Session) -> None:
         print("[singularity] migration: widened oauth_clients.client_secret_hash (VARCHAR(128) -> VARCHAR(512))")
     if "jwks_json" not in oauth_cols:
         _add_column(db, "oauth_clients", "jwks_json", "TEXT")
+
+    # Outbound dynamic clients: remember the token-endpoint auth method chosen at
+    # registration so token exchange/refresh re-authenticate the same way.
+    if "remote_oauth_clients" in already:
+        try:
+            remote_cols = _columns(db, "remote_oauth_clients")
+        except Exception as exc:
+            print(f"[singularity] migration: cannot inspect remote_oauth_clients table — {exc}")
+            remote_cols = set()
+        if "token_auth_method" not in remote_cols:
+            _add_column(db, "remote_oauth_clients", "token_auth_method", "VARCHAR(32)")
