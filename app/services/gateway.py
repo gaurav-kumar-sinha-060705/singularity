@@ -18,9 +18,17 @@ from app.config import get_settings
 from app.database import SessionLocal
 from app.models import Connection, Tool, log_event
 from app.providers import registry
+from app.providers.base import ProviderError
 from app.vault import decrypt
 
 MAIN_SCOPE = "public:read"
+
+
+def _authorization_url(provider_slug: str) -> str:
+    """The web popup where a user approves/connects a credential for a provider."""
+    settings = get_settings()
+    base = (settings.oauth_public_base or "").rstrip("/")
+    return f"{base}/authorize/{provider_slug}"
 
 
 def _resolve_credential(db: Session, user_id: str | None, provider_slug: str) -> dict | None:
@@ -84,7 +92,34 @@ def execute_via_gateway(provider_slug: str, arguments: dict, scope: str | None =
             db.commit()
             return _outcome("denied", "tool is blocked from execution (below trust threshold)")
 
+        # Validate arguments first (no credential needed); surface tool errors
+        # at 502 even when auth is also missing.
+        try:
+            provider.validate(arguments)
+        except ProviderError as exc:
+            log_event(db, "tool_executed", tool_id=tool.id, provider=provider_slug,
+                      decision="failed", reason=str(exc),
+                      channel=channel, ip_hash=ip_hash,
+                      scope_requested=effective_scope, user_id=user_id)
+            db.commit()
+            return _outcome("failed", str(exc))
+
         credential = _resolve_credential(db, user_id, provider_slug)
+        auth_required = bool(getattr(provider, "requires_auth", False))
+        if auth_required and not credential:
+            reason = (
+                f"authentication required for '{provider_slug}' — no credential "
+                f"connected; authorize at {_authorization_url(provider_slug)} "
+                f"and click Approve, then retry this call"
+            )
+            log_event(db, "tool_executed", tool_id=tool.id, provider=provider_slug,
+                      decision="auth_required", reason=reason,
+                      channel=channel, ip_hash=ip_hash,
+                      scope_requested=effective_scope, user_id=user_id)
+            db.commit()
+            return _outcome("auth_required", reason,
+                            authorization_url=_authorization_url(provider_slug))
+
         t0 = time.monotonic()
         outcome = provider.run(arguments, effective_scope, credential=credential)
         latency = outcome.get("latency_ms") or int((time.monotonic() - t0) * 1000)

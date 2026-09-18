@@ -69,6 +69,50 @@ def test_connections_alias_redirects_to_dashboard(client):
     assert urlparse(resp.headers["location"]).path == "/dashboard"
 
 
+def test_authorize_page_serves_popup_with_slug(client):
+    for slug in ("github-mcp", "slack-mcp", "notion-mcp", "stripe-mcp"):
+        resp = client.get(f"/authorize/{slug}")
+        assert resp.status_code == 200
+        assert "Authentication" in resp.text
+        assert slug in resp.text
+
+
+def test_notion_mcp_call_without_credential_returns_authorize_popup(client, monkeypatch):
+    """The exact flow the user hit: call notion-mcp with no credential -> the
+    response points at the Approve popup instead of 'can't connect'."""
+    _stub_session(monkeypatch)  # notion-mcp is a hosted remote
+    email = f"authreq-{int(time.time() * 1e6)}@example.com"
+    r = client.post("/api/v1/auth/signup", json={"email": email, "password": "hunter2hunter"})
+    assert r.status_code in (200, 201), r.text
+    headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+    r = client.post("/api/v1/execute",
+                    json={"provider_slug": "notion-mcp",
+                          "arguments": {"tool": "list_pages", "arguments": {}}},
+                    headers=headers)
+    assert r.status_code == 401, r.text
+    detail = r.json()["detail"]
+    assert "authentication required" in detail
+    assert "/authorize/notion-mcp" in detail
+    assert "click Approve" in detail
+
+
+def test_authorize_popup_store_token_flow(client):
+    """The popup's fallback path (no OAuth configured): storing a token through
+    the same endpoint the page's Connect button posts to."""
+    email = f"popup-{int(time.time() * 1e6)}@example.com"
+    r = client.post("/api/v1/auth/signup", json={"email": email, "password": "hunter2hunter"})
+    assert r.status_code in (200, 201), r.text
+    headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    r = client.post("/api/v1/connections",
+                    json={"provider_slug": "notion-mcp",
+                          "credential": {"access_token": "secret_x"}},
+                    headers=headers)
+    assert r.status_code == 201, r.text
+    conns = client.get("/api/v1/connections", headers=headers).json()
+    assert any(c["provider_slug"] == "notion-mcp" for c in conns)
+
+
 # ── Helper: signup + store a credential ─────────────────────────────────────
 
 def _signup_and_store(client, slug="stripe-mcp", email=None, password="hunter2hunter"):

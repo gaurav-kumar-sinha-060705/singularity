@@ -306,6 +306,13 @@ def call_tool(
         return f"Execution denied for '{provider_slug}': {out['reason']}."
     if out["decision"] == "disabled":
         return f"Execution unavailable: {out['reason']}."
+    if out["decision"] == "auth_required":
+        url = out.get("authorization_url") or ""
+        return (
+            f"'{provider_slug}' needs your authorization before it can run.\n"
+            f"Open {url} in a browser, sign in, and click Approve. Then ask the "
+            f"user to retry this call and it will work."
+        )
     if out["decision"] == "failed":
         return f"Execution of '{provider_slug}' failed: {out['reason']}."
 

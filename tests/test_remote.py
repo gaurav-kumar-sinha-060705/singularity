@@ -134,8 +134,9 @@ def test_remote_call_through_gateway_audited(client, monkeypatch):
         "provider_slug": "stripe-mcp",
         "arguments": {"tool": "customers_list", "arguments": {}},
     })
-    # auth_required -> refused, audited as failed (decision=failed)
-    assert resp.status_code == 502
+    # no credential -> 401 with the authorization popup URL
+    assert resp.status_code == 401
+    assert "/authorize/stripe-mcp" in resp.json()["detail"]
     db = SessionLocal()
     try:
         rows = db.query(AuditLog).filter(AuditLog.event == "tool_executed").all()
@@ -146,7 +147,7 @@ def test_remote_call_through_gateway_audited(client, monkeypatch):
                 hits.append(detail.get("decision"))
     finally:
         db.close()
-    assert "failed" in hits
+    assert "auth_required" in hits
 
 
 def test_remote_call_missing_tool_argument(client):

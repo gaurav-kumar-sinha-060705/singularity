@@ -220,8 +220,10 @@ def test_gateway_execute_slack_mcp_no_credential_fails(client):
                     json={"provider_slug": "slack-mcp",
                           "arguments": {"action": "get_workspace_info"}},
                     headers=headers)
-    assert r.status_code == 502
-    assert "no Slack token" in r.json()["detail"]
+    assert r.status_code == 401, r.text
+    detail = r.json()["detail"]
+    assert "authentication required" in detail
+    assert "/authorize/slack-mcp" in detail
 
 
 def test_verify_slack_mcp_ok(client, monkeypatch):

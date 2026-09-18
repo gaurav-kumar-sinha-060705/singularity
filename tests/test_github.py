@@ -220,8 +220,10 @@ def test_gateway_execute_github_mcp_no_credential_fails(client):
                     json={"provider_slug": "github-mcp",
                           "arguments": {"tool": "list_repositories", "arguments": {}}},
                     headers=headers)
-    assert r.status_code == 502
-    assert "no GitHub token" in r.json()["detail"]
+    assert r.status_code == 401, r.text
+    detail = r.json()["detail"]
+    assert "authentication required" in detail
+    assert "/authorize/github-mcp" in detail
 
 
 def test_verify_github_mcp_ok(client, monkeypatch):

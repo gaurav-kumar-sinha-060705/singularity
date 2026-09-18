@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Authentication · Singularity</title>
+<style>
+:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; margin: 0; min-height: 100vh; display: grid; place-items: center; background: #12151c; color: #e6e6e6; padding: 16px; }
+.card { width: 100%; max-width: 380px; background: #1b1f27; border: 1px solid #ffffff22; border-radius: 16px; padding: 26px 28px; box-shadow: 0 12px 40px #0008; text-align: center; }
+.logo { font-size: 1.6rem; }
+h1 { font-size: 1.25rem; margin: 10px 0 4px; }
+h2 { font-size: .95rem; margin: 4px 0 14px; font-weight: 500; opacity: .85; }
+p { font-size: .9rem; color: #c9cdd6; margin: 8px 0; line-height: 1.5; }
+.code { font-family: ui-monospace, monospace; background: #ffffff12; border: 1px solid #ffffff22; padding: 2px 8px; border-radius: 8px; font-size: .85rem; }
+input { width: 100%; box-sizing: border-box; padding: 12px 14px; border-radius: 10px; border: 1px solid #ffffff33; font-size: 1rem; background: #12151c; color: inherit; margin: 10px 0 6px; }
+input:focus { outline: none; border-color: #0b58fe; }
+.button { display: block; width: 100%; padding: 13px; border: 0; border-radius: 10px; background: #0b58fe; color: #fff; font-size: 1rem; font-weight: 700; cursor: pointer; margin-top: 12px; }
+.button:hover { background: #0a4ddb; }
+.button:disabled { opacity: .55; cursor: default; }
+.button.ghost { background: transparent; border: 1px solid #ffffff33; color: #c9cdd6; font-weight: 500; }
+.msg { margin-top: 12px; padding: 10px 12px; border-radius: 10px; font-size: .88rem; display: none; white-space: pre-wrap; text-align: left; }
+.msg.err { display: block; background: #dc262622; border: 1px solid #dc262655; color: #ff9b9b; }
+.msg.ok { display: block; background: #16a34a22; border: 1px solid #16a34a55; color: #9fe0b8; }
+.hint { font-size: .78rem; opacity: .7; margin-top: 14px; }
+.spin { display: inline-block; width: 12px; height: 12px; border: 2px solid #8888; border-top-color: #0b58fe; border-radius: 50%; animation: sp 0.8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+@keyframes sp { to { transform: rotate(360deg); } }
+.small { font-size: .82rem; opacity: .75; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">🔐</div>
+  <h1>Authentication</h1>
+  <h2 id="sub">Singularity needs to connect a credential</h2>
+  <p>To run tools for <span class="code" id="slug"></span>, click <strong>Approve</strong> below.</p>
+
+  <div id="ready">
+    <p class="small" id="mode">Checking…</p>
+    <button class="button" id="approveBtn" disabled>Approve</button>
+
+    <div id="fallback" style="display:none">
+      <input id="token" type="password" autocomplete="off" placeholder="Paste a token (ghp_… / sk_… / secret_… / xoxb-…)">
+      <button class="button" id="fallbackBtn">Connect (store token)</button>
+    </div>
+
+    <button class="button ghost" onclick="window.close()">Cancel</button>
+  </div>
+
+  <div id="done" style="display:none">
+    <p class="small">Connected ✓ — you can close this window and retry your tool call.</p>
+    <button class="button ghost" onclick="window.close()">Close</button>
+  </div>
+
+  <div class="msg" id="msg"></div>
+  <p class="hint">Credentials are Fernet-encrypted in your vault on this server. Only you can use them via the audited gateway.</p>
+</div>
+
+<script>
+const SLUG = "__PROVIDER_SLUG__";
+let TOKEN = sessionStorage.getItem("sg_token") || "";
+
+async function api(path, opts = {}) {
+  const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+  if (TOKEN) headers["Authorization"] = "Bearer " + TOKEN;
+  const res = await fetch(path, Object.assign({}, opts, { headers }));
+  let body = null;
+  try { body = await res.json(); } catch (e) {}
+  return { status: res.status, body };
+}
+
+function msg(text, kind) {
+  const el = document.getElementById("msg");
+  el.className = "msg " + kind;
+  el.textContent = text;
+}
+
+async function boot() {
+  document.getElementById("slug").textContent = SLUG;
+  if (!TOKEN) {
+    const signin = await api("/api/v1/auth/signin", {
+      method: "POST",
+      body: JSON.stringify({ email: "", password: "" }),
+    });
+    return showSigninOrDashboard(signin);
+  }
+  const me = await api("/api/v1/auth/me");
+  if (me.status === 200) return showSlot();
+  // expired/invalid token; drop it and ask to sign in
+  sessionStorage.removeItem("sg_token");
+  return showSigninOrDashboard(me);
+}
+
+async function showSigninOrDashboard(resp) {
+  window.location.href = "/dashboard";
+}
+
+async function showSlot() {
+  const [provsR, connsR] = await Promise.all([
+    api("/api/v1/oauth/providers"),
+    api("/api/v1/connections"),
+  ]);
+  const oauthSlug = SLUG.replace(/-mcp$/, "");
+  const prov = (provsR.body || []).find(p => p.slug === oauthSlug);
+  const conns = (connsR.body || []);
+  const connected = conns.some(c => c.provider_slug === SLUG);
+
+  if (connected) {
+    document.getElementById("ready").style.display = "none";
+    document.getElementById("done").style.display = "block";
+    return;
+  }
+
+  document.getElementById("approveBtn").disabled = false;
+  const configured = !!prov && prov.configured === true;
+  if (configured) {
+    document.getElementById("mode").textContent =
+      "One-click connect with " + prov.name + " (you'll approve on their page).";
+    document.getElementById("approveBtn").textContent = "Approve & connect " + (prov.name || "");
+    document.getElementById("approveBtn").onclick = () => startOAuth(oauthSlug);
+  } else {
+    document.getElementById("mode").textContent =
+      "OAuth isn't configured, so connect the once using a token:";
+    document.getElementById("fallback").style.display = "block";
+    document.getElementById("approveBtn").style.display = "none";
+    document.getElementById("fallbackBtn").onclick = saveKey;
+  }
+}
+
+async function startOAuth(slug) {
+  const btn = document.getElementById("approveBtn");
+  btn.disabled = true; btn.textContent = "Opening " + slug + "…";
+  try {
+    const res = await fetch("/api/v1/oauth/" + slug + "/authorize", {
+      headers: { Authorization: "Bearer " + TOKEN },
+      redirect: "manual",
+    });
+    if (res.type === "opaqueredirect" || res.headers.get("location")) {
+      window.location.href = res.headers.get("location") || "/api/v1/oauth/" + slug + "/authorize";
+      return;
+    }
+    const data = await res.json().catch(() => null);
+    msg((data && data.detail) || "OAuth failed (" + res.status + ").", "err");
+    btn.disabled = false; btn.textContent = "Approve";
+  } catch (e) {
+    msg("Could not start OAuth: " + e.message, "err");
+    btn.disabled = false; btn.textContent = "Approve";
+  }
+}
+
+async function saveKey() {
+  const val = document.getElementById("token").value.trim();
+  if (!val) return msg("A token is required.", "err");
+  const btn = document.getElementById("fallbackBtn");
+  btn.disabled = true; btn.textContent = "Storing…";
+  const r = await api("/api/v1/connections", {
+    method: "POST",
+    body: JSON.stringify({ provider_slug: SLUG, credential: { access_token: val } }),
+  });
+  if (r.status >= 300) {
+    msg((r.body && r.body.detail) || "Store failed.", "err");
+    btn.disabled = false; btn.textContent = "Connect (store token)";
+    return;
+  }
+  document.getElementById("ready").style.display = "none";
+  document.getElementById("done").style.display = "block";
+}
+
+boot();
+</script>
+</body>
+</html>

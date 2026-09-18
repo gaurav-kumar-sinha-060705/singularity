@@ -31,6 +31,8 @@ def execute(payload: ExecuteRequest, request: Request, db: Session = Depends(get
         raise HTTPException(status_code=503, detail=out["reason"])
     if out["decision"] == "denied":
         raise HTTPException(status_code=403, detail=out["reason"])
+    if out["decision"] == "auth_required":
+        raise HTTPException(status_code=401, detail=out["reason"])
     if out["decision"] == "failed":
         raise HTTPException(status_code=502, detail=out["reason"])
 
