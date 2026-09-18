@@ -26,6 +26,9 @@ def _load_remote_catalog() -> list[RemoteMcpProvider]:
             description=entry.get("server_description", ""),
             category="hosted",
             auth_required=entry.get("auth_required", True),
+            auth_kind=entry.get("auth_kind", "bearer"),
+            auth_param=entry.get("auth_param"),
+            api_key_hint=entry.get("api_key_hint", ""),
         ))
     return providers
 
@@ -78,6 +81,9 @@ def list_public_tools() -> list[dict]:
             "category": p.category,
             "description": p.description,
             "scopes": sorted(p.scopes),
+            "tier": "tier1",
+            "requires_credential": bool(getattr(p, "requires_auth", False)),
+            "api_key_hint": getattr(p, "token_hint", ""),
         }
         for p in sorted(_PROVIDERS.values(), key=lambda p: p.slug)
     ]
@@ -92,6 +98,9 @@ def list_public_tools() -> list[dict]:
             "hosted": True,
             "remote_url": p.remote_url,
             "auth_required": p.requires_auth,
+            "tier": getattr(p, "tier", "tier2"),
+            "auth_kind": getattr(p, "auth_kind", "bearer"),
+            "api_key_hint": getattr(p, "api_key_hint", ""),
         }
         for p in sorted(_REMOTE_PROVIDERS.values(), key=lambda p: p.slug)
     ]
@@ -106,6 +115,8 @@ def list_public_tools() -> list[dict]:
             "hosted": True,
             "bridge": "stdio",
             "auth_required": p.requires_auth,
+            "tier": "tier3",
+            "api_key_hint": getattr(p, "api_key_hint", ""),
         }
         for p in sorted(_STDIO_PROVIDERS.values(), key=lambda p: p.slug)
     ]

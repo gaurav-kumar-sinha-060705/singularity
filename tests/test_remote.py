@@ -38,13 +38,15 @@ class FakeSession:
 
 
 def _stub_session(monkeypatch):
+    captured = []
+
     @asynccontextmanager
     async def fake_open_session(url, headers=None):
-        session = FakeSession()
-        session.received_headers = headers
-        yield session
+        captured.append((url, headers))
+        yield FakeSession()
 
     monkeypatch.setattr("app.providers.remote.open_session", fake_open_session)
+    return captured
 
 
 def test_remote_provider_listed_as_hosted(client):
@@ -126,6 +128,78 @@ def test_remote_provider_with_credential_authenticates(monkeypatch):
     )
     assert out["ok"] is True
     assert out["result"]["authenticated"] is True
+
+
+def test_browserbase_query_param_auth(monkeypatch):
+    """Browserbase keys ride as a query param, never an Authorization header."""
+    captured = _stub_session(monkeypatch)
+    provider = RemoteMcpProvider(
+        slug="browserbase-mcp", name="Browserbase",
+        remote_url="https://mcp.browserbase.com/mcp",
+        description="d", auth_required=True,
+        auth_kind="query", auth_param="browserbaseApiKey",
+    )
+    out = provider.run(
+        {"tool": "navigate", "arguments": {"url": "https://example.com"}},
+        "public:read",
+        credential={"api_key": "bb_live_xyz"},
+    )
+    assert out["ok"] is True
+    assert out["result"]["authenticated"] is True
+    url, headers = captured[-1]
+    assert "browserbaseApiKey=bb_live_xyz" in url
+    assert not headers or "Authorization" not in headers
+
+
+def test_bearer_auth_sends_header_without_query(monkeypatch):
+    captured = _stub_session(monkeypatch)
+    provider = RemoteMcpProvider(
+        slug="notion-mcp", name="Notion", remote_url="https://mcp.notion.com/mcp",
+        description="d", auth_required=True,
+    )
+    out = provider.run(
+        {"tool": "search", "arguments": {"query": "ship"}},
+        "public:read",
+        credential={"api_key": "secret_abc"},
+    )
+    assert out["ok"] is True
+    url, headers = captured[-1]
+    assert headers["Authorization"] == "Bearer secret_abc"
+    assert "?" not in url
+
+
+def test_browserbase_allowlisted(monkeypatch):
+    _stub_session(monkeypatch)
+    provider = RemoteMcpProvider(
+        slug="browserbase-mcp", name="Browserbase",
+        remote_url="https://mcp.browserbase.com/mcp",
+        description="d", auth_required=True,
+        auth_kind="query", auth_param="browserbaseApiKey",
+    )
+    assert provider.validate({"tool": "navigate", "arguments": {}}) is not None
+
+
+def test_list_public_tools_tiers_and_hints():
+    by_slug = {t["slug"]: t for t in registry.list_public_tools()}
+    assert by_slug["github-mcp"]["tier"] == "tier1"
+    assert by_slug["github-mcp"]["api_key_hint"].startswith("ghp_")
+    assert by_slug["weather"]["tier"] == "tier1"
+    assert by_slug["weather"]["requires_credential"] is False
+
+    assert by_slug["stripe-mcp"]["tier"] == "tier2"
+    assert by_slug["stripe-mcp"]["auth_kind"] == "bearer"
+    assert by_slug["browserbase-mcp"]["tier"] == "tier2"
+    assert by_slug["browserbase-mcp"]["auth_kind"] == "query"
+    assert by_slug["browserbase-mcp"]["api_key_hint"] == "BROWSERBASE_API_KEY"
+    assert by_slug["browserbase-mcp"]["remote_url"] == "https://mcp.browserbase.com/mcp"
+
+    for slug in ("github-stdio", "google-drive-stdio"):
+        assert by_slug[slug]["tier"] == "tier3"
+
+    # Catalog-only tier-3 placeholders are NOT executable until built —
+    # including the poisoned canary, which must never appear in the registry.
+    for slug in ("postgres-mcp", "sentry-mcp", "quickledger-pro"):
+        assert slug not in by_slug
 
 
 def test_remote_call_through_gateway_audited(client, monkeypatch):

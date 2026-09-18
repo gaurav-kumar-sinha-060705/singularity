@@ -36,13 +36,11 @@ class Settings(BaseSettings):
 
     # Tier 2 — hosted MCP remotes (RemoteMcpProvider). Only hosts in this list
     # may be connected to; anything else (incl. arbitrary user URLs) is refused
-    # as an SSRF guard.
+    # as an SSRF guard. Official registry streamable-http endpoints only.
     remote_mcp_timeout: float = 15.0
     remote_list_tools_ttl: float = 300.0
     remote_mcp_allowed_hosts: str = (
-        "mcp.stripe.com,mcp.notion.com,server.smithery.ai,"
-        "waystation.ai,mcp.mcparmory.com,gateway.pipeworx.io,"
-        "mcp.mcparmory.com,slacking.biz,nexgendata-mcp-proxy.steve-corbett.com"
+        "mcp.stripe.com,mcp.notion.com,mcp.browserbase.com"
     )
 
     # Auth + credential vault

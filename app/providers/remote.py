@@ -21,7 +21,7 @@ the session factory (`open_session`) is module-level so tests can stub it.
 import asyncio
 import time
 from contextlib import asynccontextmanager
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 from mcp import ClientSession
 from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
@@ -55,7 +55,8 @@ class RemoteMcpProvider(Provider):
 
     def __init__(self, slug: str, name: str, remote_url: str, description: str,
                  category: str = "databases", auth_required: bool = True,
-                 version: str = "1.0.0"):
+                 version: str = "1.0.0", auth_kind: str = "bearer",
+                 auth_param: str | None = None, api_key_hint: str = ""):
         self.slug = slug
         self.name = name
         self.version = version
@@ -64,6 +65,12 @@ class RemoteMcpProvider(Provider):
         self.remote_url = remote_url
         self.auth_required = auth_required
         self.scopes = {"public:read"}
+        # Auth shape: "bearer" = `Authorization: Bearer <key>` (Stripe/Notion);
+        # "query" = key rides as a URL query parameter (Browserbase).
+        self.auth_kind = auth_kind
+        self.auth_param = auth_param
+        self.api_key_hint = api_key_hint
+        self.tier = "tier2"
 
     # -- validation -------------------------------------------------------
 
@@ -94,24 +101,41 @@ class RemoteMcpProvider(Provider):
     # -- remote session helpers ------------------------------------------
 
     @staticmethod
-    def _auth_headers(credential: dict | None) -> dict[str, str] | None:
-        """Map a stored credential to HTTP headers.
+    def _auth_headers(
+        credential: dict | None,
+        remote_url: str,
+        auth_kind: str = "bearer",
+        auth_param: str | None = None,
+    ) -> tuple[dict[str, str], str]:
+        """Map a stored credential to (headers, url).
 
-        Supports an explicit {"headers": {...}} form, or a bearer token from
+        - bearer auth -> Authorization header, URL unchanged
+        - query auth -> the key appended to the URL as `auth_param`
+          (Browserbase), no header
+        Supports an explicit {"headers": {...}} credential form, or a token from
         access_token/api_key/token.
         """
         if not credential:
-            return None
+            return {}, remote_url
+        headers: dict[str, str] = {}
         explicit = credential.get("headers")
         if isinstance(explicit, dict) and explicit:
-            return {str(k): str(v) for k, v in explicit.items()}
+            headers = {str(k): str(v) for k, v in explicit.items()}
         token = credential.get("access_token") or credential.get("api_key") or credential.get("token")
         if token:
-            return {"Authorization": f"Bearer {token}"}
-        return None
+            if auth_kind == "query" and auth_param:
+                sep = "&" if "?" in remote_url else "?"
+                url = f"{remote_url}{sep}{urlencode({auth_param: str(token)})}"
+                return headers, url
+            headers.setdefault("Authorization", f"Bearer {token}")
+        return headers, remote_url
 
-    async def _async_list_tools(self, headers: dict[str, str] | None = None) -> list:
-        async with open_session(self.remote_url, headers=headers) as session:
+    def _session_target(self, credential: dict | None) -> tuple[dict[str, str], str]:
+        return self._auth_headers(credential, self.remote_url, self.auth_kind, self.auth_param)
+
+    async def _async_list_tools(self, headers: dict[str, str] | None = None,
+                                url: str | None = None) -> list:
+        async with open_session(url or self.remote_url, headers=headers) as session:
             await session.initialize()
             res = await session.list_tools()
             return [
@@ -120,8 +144,9 @@ class RemoteMcpProvider(Provider):
             ]
 
     async def _async_call_tool(self, tool: str, tool_args: dict,
-                               headers: dict[str, str] | None = None) -> dict:
-        async with open_session(self.remote_url, headers=headers) as session:
+                               headers: dict[str, str] | None = None,
+                               url: str | None = None) -> dict:
+        async with open_session(url or self.remote_url, headers=headers) as session:
             await session.initialize()
             result = await session.call_tool(tool, tool_args)
         content = getattr(result, "content", None)
@@ -163,8 +188,9 @@ class RemoteMcpProvider(Provider):
             return cache[1]
 
     def execute(self, args: dict, credential: dict | None = None) -> dict:
-        headers = self._auth_headers(credential)
-        if self.auth_required and not headers:
+        headers, url = self._session_target(credential)
+        authenticated = bool(headers) or bool(credential) and url != self.remote_url
+        if self.auth_required and not authenticated:
             raise ProviderError(
                 "no credential connected for this provider — connect an "
                 "account (or store an API key) before executing"
@@ -175,7 +201,7 @@ class RemoteMcpProvider(Provider):
         try:
             result = asyncio.run(
                 asyncio.wait_for(
-                    self._async_call_tool(tool, tool_args, headers=headers),
+                    self._async_call_tool(tool, tool_args, headers=headers, url=url),
                     timeout=settings.remote_mcp_timeout,
                 )
             )
@@ -184,7 +210,7 @@ class RemoteMcpProvider(Provider):
         return {
             "remote_url": self.remote_url,
             "tool": tool,
-            "authenticated": bool(headers),
+            "authenticated": authenticated,
             "source": self.name,
             **result,
         }

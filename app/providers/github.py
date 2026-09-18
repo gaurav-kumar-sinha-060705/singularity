@@ -96,6 +96,7 @@ class GithubProvider(Provider):
     slug = "github-mcp"
     name = "GitHub (first-party REST)"
     version = "1.0.0"
+    token_hint = "ghp_... (fine-grained PAT) or gho_... (OAuth)"
     category = "developer-tools"
     description = (
         "First-party gateway to the GitHub REST API using the user's stored "

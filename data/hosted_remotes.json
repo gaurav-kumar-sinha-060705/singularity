@@ -6,7 +6,9 @@
     "server_name": "Stripe MCP (official)",
     "server_description": "Stripe's official hosted MCP server. Requires a Stripe API key.",
     "auth_required": true,
-    "tier": "hosted"
+    "auth_kind": "bearer",
+    "api_key_hint": "sk_...",
+    "tier": "tier2"
   },
   "notion-mcp": {
     "slug": "notion-mcp",
@@ -15,26 +17,20 @@
     "server_name": "Notion MCP (official)",
     "server_description": "Notion's official hosted MCP server. Requires Notion API key.",
     "auth_required": true,
-    "tier": "hosted"
+    "auth_kind": "bearer",
+    "api_key_hint": "secret_...",
+    "tier": "tier2"
   },
-  "github-mcp": {
-    "slug": "github-mcp",
-    "remote_url": "https://server.smithery.ai/@smithery-ai/github-mcp",
-    "host": "server.smithery.ai",
-    "server_name": "GitHub MCP via Smithery",
-    "server_description": "DEPRECATED — Smithery endpoint returns 404; replaced by the first-party GitHub REST provider (app/providers/github.py).",
+  "browserbase-mcp": {
+    "slug": "browserbase-mcp",
+    "remote_url": "https://mcp.browserbase.com/mcp",
+    "host": "mcp.browserbase.com",
+    "server_name": "Browserbase MCP (official)",
+    "server_description": "Browserbase's official hosted Streamable HTTP MCP server: navigate, act, observe, and extract from headless browsers. API key is passed as the browserbaseApiKey query parameter.",
     "auth_required": true,
-    "tier": "hosted",
-    "deprecated": true
-  },
-  "slack-mcp": {
-    "slug": "slack-mcp",
-    "remote_url": "https://waystation.ai/slack/mcp",
-    "host": "waystation.ai",
-    "server_name": "Slack MCP via WayStation",
-    "server_description": "DEPRECATED — WayStation returns 402 DEPLOYMENT_DISABLED (host-side); replaced by the first-party Slack REST provider (app/providers/slack_mcp.py).",
-    "auth_required": true,
-    "tier": "hosted",
-    "deprecated": true
+    "auth_kind": "query",
+    "auth_param": "browserbaseApiKey",
+    "api_key_hint": "BROWSERBASE_API_KEY",
+    "tier": "tier2"
   }
 }

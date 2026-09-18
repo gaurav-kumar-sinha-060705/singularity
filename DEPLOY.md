@@ -47,12 +47,14 @@ Replace `XXXX` in `server.json` and `smithery.yaml` with your actual Render app 
 
 ```powershell
 $u = "https://singularity-xxxx.onrender.com"
-Invoke-RestMethod "$u/health"                                   # expect status ok, indexed_tools 19+
+Invoke-RestMethod "$u/health"                                   # expect status ok, indexed_tools 21+
 Invoke-RestMethod "$u/.well-known/oauth-authorization-server"   # expect issuer = your Render URL
-powershell -ExecutionPolicy Bypass -File scripts\smoke_mcp.ps1 -BaseUrl $u
+Invoke-RestMethod "$u/authorize/stripe-mcp"                     # expect OAuth UI (challenge flow for /mcp)
 ```
 
-The smoke script runs a full MCP handshake against the public URL. The OAuth issuer
+`/mcp` requires an OAuth access token (Authorization popup at `/authorize/<slug>`), so a bare
+handshake smoke script no longer applies; regression coverage lives in `python -m pytest tests/`.
+The OAuth issuer
 base auto-derives from `RENDER_EXTERNAL_URL` (no env var needed). If you want to
 override it (e.g., custom domain), set `SINGULARITY_OAUTH_PUBLIC_BASE` in the
 Render dashboard.

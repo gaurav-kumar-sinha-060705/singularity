@@ -43,10 +43,8 @@ and gets ranked options with trust cards and security flags.
 One-click install (replace the URL after deploying):
 [Install in VS Code](vscode:mcp/install?name=singularity&url=http%3A%2F%2F127.0.0.1%3A8000%2Fmcp)
 
-Smoke-check any endpoint without an editor:
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\smoke_mcp.ps1 -BaseUrl http://127.0.0.1:8000
-```
+> `/mcp` now requires OAuth (a popup at `/authorize/<slug>` supplies the access
+> token). For a curl-able check use `/health` and `/.well-known/oauth-authorization-server`.
 
 ## Tools
 
@@ -116,9 +114,10 @@ singularity/
     embeddings.py             fastembed provider (bge-small-en-v1.5)
   routers/
     recommend.py              POST /recommend, GET /tools
-data/seed_tools.json          curated 15-tool index incl. demo attack sample
+data/seed_tools.json          curated 21-tool index incl. demo attack sample (tier1/tier2/tier3)
 scripts/seed_index.py         manual seeding CLI
-scripts/smoke_mcp.ps1         end-to-end MCP handshake smoke test (works on remote URLs too)
+scripts/smoke_execute.ps1     authenticated REST execute smoke test
+scripts/smoke_oauth.py        OAuth discovery + config smoke test
 Dockerfile / render.yaml      one-command Render deployment
 server.json / smithery.yaml   registry publishing manifests (fill placeholders first)
 tests/                        pytest suite (API + scanner + MCP tools & endpoint)

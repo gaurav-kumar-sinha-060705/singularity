@@ -93,6 +93,7 @@ class SlackMcpProvider(Provider):
     slug = "slack-mcp"
     name = "Slack (first-party REST)"
     version = "1.0.0"
+    token_hint = "xoxb-... (bot) or xoxp-... (user)"
     category = "communication"
     description = (
         "First-party gateway to the Slack Web API using the user's stored "

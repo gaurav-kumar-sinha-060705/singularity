@@ -41,6 +41,7 @@ ALLOWLISTED_STDIO: list[dict] = [
         "binfmt": "local",
         "env": {"access_token": "GITHUB_PERSONAL_ACCESS_TOKEN", "api_key": "GITHUB_PERSONAL_ACCESS_TOKEN"},
         "credential_env": "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "api_key_hint": "ghp_...",
         "auth_required": True,
     },
     {
@@ -52,6 +53,7 @@ ALLOWLISTED_STDIO: list[dict] = [
         "binfmt": "local",
         "env": {"access_token": "GOOGLE_DRIVE_ACCESS_TOKEN"},
         "credential_env": "GOOGLE_DRIVE_ACCESS_TOKEN",
+        "api_key_hint": "Drive OAuth token",
         "auth_required": True,
     },
 ]
@@ -123,6 +125,8 @@ class StdioMcpProvider(Provider):
         self.category: str = spec.get("category", "bridge")
         self.auth_required: bool = spec.get("auth_required", True)
         self.description: str = spec["description"]
+        self.api_key_hint: str = spec.get("api_key_hint", "")
+        self.tier = "tier3"
 
     @property
     def requires_auth(self) -> bool:

@@ -128,23 +128,41 @@ def verify_connection(
         )
 
     headers = None
-    build_headers = getattr(provider, "_auth_headers", None)
-    if build_headers is not None:
-        headers = build_headers(credential)
-        if provider.requires_auth and not headers:
+    url = None
+    session_target = getattr(provider, "_session_target", None)
+    if session_target is not None:
+        headers, url = session_target(credential)
+        if provider.requires_auth and not headers and url == getattr(provider, "remote_url", None):
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
-                "stored credential yields no auth headers — store an access_token/api_key or headers",
+                "stored credential yields no auth — store an access_token/api_key or headers",
             )
+    else:
+        build_headers = getattr(provider, "_auth_headers", None)
+        if build_headers is not None:
+            headers = build_headers(credential)
+            if provider.requires_auth and not headers:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    "stored credential yields no auth headers — store an access_token/api_key or headers",
+                )
 
     settings = get_settings()
     try:
-        tools = asyncio.run(
-            asyncio.wait_for(
-                list_tools(headers),
-                timeout=settings.remote_mcp_timeout,
+        if url and url != getattr(provider, "remote_url", None):
+            tools = asyncio.run(
+                asyncio.wait_for(
+                    list_tools(headers, url),
+                    timeout=settings.remote_mcp_timeout,
+                )
             )
-        )
+        else:
+            tools = asyncio.run(
+                asyncio.wait_for(
+                    list_tools(headers),
+                    timeout=settings.remote_mcp_timeout,
+                )
+            )
     except Exception as exc:
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, f"verification failed against remote MCP: {exc}"

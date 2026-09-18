@@ -254,12 +254,21 @@ def list_public_tools() -> str:
     tools = registry.list_public_tools()
     if not tools:
         return "### Executable public tools\nnone"
+    tier_labels = {
+        "tier1": "tier1 · built-in",
+        "tier2": "tier2 · streamable-http (official)",
+        "tier3": "tier3 · stdio (container)",
+    }
     lines = []
     for t in tools:
-        extra = " — hosted remote (auth required)" if t.get("hosted") and t.get("auth_required") else ""
+        label = tier_labels.get(t.get("tier", ""), t.get("tier", ""))
+        if t.get("requires_credential") or t.get("auth_required"):
+            hint = t.get("api_key_hint") or "API key"
+            cred = f" — needs credential ({hint})"
+        else:
+            cred = " — keyless"
         lines.append(
-            f"- `{t['slug']}` — {t['name']} — {t['category']} — "
-            f"scopes: {', '.join(t['scopes'])}{extra}"
+            f"- `{t['slug']}` — {t['name']} — {label}{cred}"
         )
     return (
         "### Executable public tools\n" + "\n".join(lines) + "\n\n"
