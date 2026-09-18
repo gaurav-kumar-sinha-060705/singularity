@@ -12,25 +12,26 @@ re-enter credentials on every connector connect.
 
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
 import json
-import time as _time
+import uuid
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.database import get_db
 from app.mcp_oauth import get_oauth_user_by_email, issue_authorization_code
-from app.models import OAuthClient, User, log_event
+from app.mcp_session import (
+    read_session,
+    set_session_cookie,
+    wrap_pending_cookie,
+)
+from app.models import Connection, OAuthClient, User, log_event
+from app.oauth import get_provider
+from app.vault import encrypt
 
 router = APIRouter(prefix="/mcp-auth", tags=["mcp-auth"])
-
-MCP_SESSION_TTL_SECONDS = 1800
 
 _PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -45,6 +46,7 @@ input {{ width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius:
 button {{ margin-top: 18px; width: 100%; padding: 11px; border: 0; border-radius: 8px; background: #0b58fe; color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; }}
 button:hover {{ background: #0a4ddb; }}
 .alt {{ text-align: center; margin-top: 16px; font-size: .9rem; }}
+.hint {{ margin-top: 16px; font-size: .8rem; opacity: .7; }}
 a {{ color: #0b58fe; }}
 </style></head><body>
 {body}
@@ -89,46 +91,75 @@ tools on your behalf.</p>
 </div>
 """
 
+_PROVIDER_CONNECT = """
+<div class="box">
+<h1>Connect {provider_name}</h1>
+<p>To run <strong>{provider_name}</strong> tools through Singularity, the gateway
+needs a credential for {resource}.</p>
+{connect_ui}
+<p class="hint">Credentials are encrypted in the vault on this Singularity
+instance and are only ever used through the audited gateway.</p>
+</div>
+"""
 
-def _sign(payload: str) -> str:
-    secret = get_settings().jwt_secret
-    return base64.urlsafe_b64encode(
-        hmac.new(secret.encode(), payload.encode(), hashlib.sha256).digest()
-    ).rstrip(b"=").decode()
+_PROVIDER_APPROVE = """
+<form method="post" action="/mcp-auth/consent">
+  {hidden}
+  <button type="submit" name="approve" value="1">Approve &amp; connect {provider_name}</button>
+</form>
+<p class="alt">You'll be taken to {provider_name} to approve, then dropped back here automatically.</p>
+"""
+
+_PROVIDER_TOKEN = """
+<form method="post" action="/mcp-auth/consent">
+  {hidden}
+  <label for="token">Credential ({hint})</label>
+  <input type="password" id="token" name="token" autocomplete="off" placeholder="{hint}">
+  {error}
+  <button type="submit" name="approve" value="1">Connect (store credential)</button>
+</form>
+<p class="alt">Setting up {provider_name} OAuth later turns this into a one-click Approve.</p>
+"""
 
 
-def _wrap_cookie(user_id: str) -> str:
-    payload = {"u": user_id, "exp": int(_time.time()) + MCP_SESSION_TTL_SECONDS}
-    raw = base64.urlsafe_b64encode(
-        json.dumps(payload, separators=(",", ":")).encode()
-    ).rstrip(b"=").decode()
-    return f"{raw}.{_sign(raw)}"
+def _escape(value) -> str:
+    from html import escape
+
+    return escape(str(value), quote=True)
 
 
-def _read_cookie(cookies: dict) -> str | None:
-    value = cookies.get("mcp_session")
-    if not value:
-        return None
-    try:
-        raw, sig = value.rsplit(".", 1)
-        if not hmac.compare_digest(sig, _sign(raw)):
-            return None
-        payload = json.loads(base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4)))
-        if payload.get("exp", 0) < _time.time():
-            return None
-        return payload.get("u")
-    except Exception:
-        return None
+def _provider_hint(slug: str) -> str:
+    from app.providers import registry
+
+    provider = registry.get_provider(slug)
+    if provider and hasattr(provider, "token_hint"):
+        return provider.token_hint
+    hints = {
+        "github": "ghp_...",
+        "slack": "xoxb-... or xoxp-...",
+        "notion": "secret_...",
+        "stripe": "sk_...",
+        "google": "OAuth token",
+    }
+    return hints.get(slug.replace("-mcp", ""), "API key")
 
 
-def _set_session_cookie(response: Response, user_id: str) -> None:
-    response.set_cookie(
-        "mcp_session",
-        _wrap_cookie(user_id),
-        max_age=MCP_SESSION_TTL_SECONDS,
-        httponly=True,
-        samesite="lax",
-    )
+def _provider_display_name(slug: str) -> str:
+    cfg_name = get_provider(slug.replace("-mcp", ""))
+    if cfg_name:
+        return cfg_name.name
+    hints = {"github-mcp": "GitHub", "slack-mcp": "Slack",
+             "notion-mcp": "Notion", "stripe-mcp": "Stripe"}
+    return hints.get(slug, slug)
+
+
+def _is_provider_resource(resource: str) -> bool:
+    if not resource:
+        return False
+    from app.providers import registry
+
+    provider = registry.get_provider(resource)
+    return bool(provider and getattr(provider, "requires_auth", False))
 
 
 def _hidden_fields(client_id, redirect_uri, code_challenge, state, scope, resource) -> str:
@@ -183,14 +214,34 @@ def consent_page(
     scope: str = Query("mcp:tools"),
     resource: str = Query(""),
 ):
-    user_id = _read_cookie(request.cookies)
+    user_id = read_session(request.cookies)
     client_name = _client_display_name(db, client_id)
     hidden = _hidden_fields(client_id, redirect_uri, code_challenge, state, scope, resource)
     if user_id is None:
         body = _FORM.format(hidden=hidden)
         return HTMLResponse(_PAGE.format(title="Sign in", body=body))
+    if _is_provider_resource(resource):
+        body = _provider_body(resource, client_name, hidden, state="")
+        return HTMLResponse(_PAGE.format(title=f"Connect {_provider_display_name(resource)}", body=body))
     body = _CONSENT.format(client_name=client_name, scopes=scope, hidden=hidden)
     return HTMLResponse(_PAGE.format(title="Approve access", body=body))
+
+
+def _provider_body(resource: str, client_name: str, hidden: str, state: str) -> str:
+    provider_name = _provider_display_name(resource)
+    cfg = get_provider(resource.replace("-mcp", ""))
+    oauth_ready = bool(cfg and cfg.configured)
+    if oauth_ready:
+        connect_ui = _PROVIDER_APPROVE.format(hidden=hidden, provider_name=provider_name)
+    else:
+        hint = _provider_hint(resource)
+        error = f'<p class="alt" style="color:#dc2626">{_escape(state)}</p>' if state else ""
+        connect_ui = _PROVIDER_TOKEN.format(
+            hidden=hidden, hint=hint, error=error, provider_name=provider_name,
+        )
+    return _PROVIDER_CONNECT.format(
+        provider_name=provider_name, resource=resource, connect_ui=connect_ui,
+    )
 
 
 @router.post("/consent")
@@ -202,6 +253,7 @@ def consent_submit(
     password: str = Form(""),
     signup: str = Form("0"),
     approve: str = Form("0"),
+    token: str = Form(""),
     client_id: str = Form(""),
     redirect_uri: str = Form(""),
     code_challenge: str = Form(""),
@@ -218,12 +270,18 @@ def consent_submit(
         "resource": resource,
     }
 
-    existing_user_id = _read_cookie(request.cookies)
+    existing_user_id = read_session(request.cookies)
     _validate_client_params(db, params)
 
+    provider_resource = resource if _is_provider_resource(resource) else None
+
     if approve == "1":
-        if not existing_user_id:
+        if not existing_user_id and not provider_resource:
             raise HTTPException(400, "approval requires a signed-in session")
+        if provider_resource:
+            return _consent_provider_connect(
+                existing_user_id, provider_resource, params, token, db, response
+            )
         code = issue_authorization_code(
             client_id=params["client_id"],
             user_id=existing_user_id,
@@ -250,26 +308,99 @@ def consent_submit(
             raise HTTPException(409, "email is already registered — sign in instead")
         if len(password) < 8:
             raise HTTPException(400, "password must be at least 8 characters")
-        import uuid
         user = User(id=str(uuid.uuid4()), email=email.lower().strip())
         user.set_password(password)
         db.add(user)
         log_event(db, "user_created", channel="mcp_oauth", email=user.email)
         db.commit()
 
-    _set_session_cookie(response, user.id)
+    set_session_cookie(response, user.id)
     client_name = _client_display_name(db, params["client_id"])
     hidden = _hidden_fields(
         params["client_id"], params["redirect_uri"], params["code_challenge"],
         params["state"], params["scope"], params["resource"],
     )
+    if provider_resource:
+        body = _provider_body(provider_resource, client_name, hidden, state="")
+        page = HTMLResponse(
+            _PAGE.format(title=f"Connect {_provider_display_name(provider_resource)}", body=body),
+            status_code=200,
+        )
+        set_session_cookie(page, user.id)
+        return page
     body = _CONSENT.format(client_name=client_name, scopes=params["scope"], hidden=hidden)
     page = HTMLResponse(_PAGE.format(title="Approve access", body=body), status_code=200)
-    page.set_cookie(
-        "mcp_session",
-        _wrap_cookie(user.id),
-        max_age=MCP_SESSION_TTL_SECONDS,
-        httponly=True,
-        samesite="lax",
-    )
+    set_session_cookie(page, user.id)
     return page
+
+
+def _consent_provider_connect(
+    user_id: str | None,
+    resource: str,
+    params: dict,
+    token: str,
+    db: Session,
+    response: Response,
+):
+    """Finish a provider-resource consent: store the credential (paste path) or
+    hand off to the provider's OAuth (click-approve path), then continue the MCP
+    authorization-code flow."""
+    provider_name = _provider_display_name(resource)
+    cfg = get_provider(resource.replace("-mcp", ""))
+    oauth_ready = bool(cfg and cfg.configured)
+
+    if not token.strip():
+        if oauth_ready and user_id:
+            response.set_cookie(
+                "nxt_pending",
+                wrap_pending_cookie(
+                    user_id,
+                    params["client_id"],
+                    params["redirect_uri"],
+                    params["code_challenge"],
+                    params["state"],
+                    params["scope"],
+                    params["resource"],
+                ),
+                max_age=600,
+                httponly=True,
+                samesite="lax",
+            )
+            return RedirectResponse(
+                f"/api/v1/oauth/{resource.replace('-mcp', '')}/authorize", status_code=303
+            )
+        if user_id:
+            raise HTTPException(400, "a credential is required to connect this tool")
+        raise HTTPException(400, "sign in first to connect this tool")
+
+    if not user_id:
+        raise HTTPException(400, "sign in first to connect this tool")
+    _store_provider_credential(db, user_id, resource, token.strip())
+    code = issue_authorization_code(
+        client_id=params["client_id"],
+        user_id=user_id,
+        redirect_uri=params["redirect_uri"],
+        code_challenge=params["code_challenge"],
+        scope=params["scope"],
+        db=db,
+    )
+    sep = "&" if "?" in params["redirect_uri"] else "?"
+    return RedirectResponse(
+        f'{params["redirect_uri"]}{sep}{urlencode({"code": code, "state": params["state"]})}',
+        status_code=303,
+    )
+
+
+def _store_provider_credential(db: Session, user_id: str, provider_slug: str, token_value: str) -> None:
+    db.query(Connection).filter(
+        Connection.user_id == user_id, Connection.provider_slug == provider_slug
+    ).delete()
+    conn = Connection(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        provider_slug=provider_slug,
+        credential_json=encrypt(json.dumps({"access_token": token_value})),
+    )
+    db.add(conn)
+    log_event(db, "connection_created", channel="mcp_oauth", user_id=user_id, provider=provider_slug)
+    db.commit()

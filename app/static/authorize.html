@@ -132,17 +132,13 @@ async function startOAuth(slug) {
   const btn = document.getElementById("approveBtn");
   btn.disabled = true; btn.textContent = "Opening " + slug + "…";
   try {
-    const res = await fetch("/api/v1/oauth/" + slug + "/authorize", {
-      headers: { Authorization: "Bearer " + TOKEN },
-      redirect: "manual",
-    });
-    if (res.type === "opaqueredirect" || res.headers.get("location")) {
-      window.location.href = res.headers.get("location") || "/api/v1/oauth/" + slug + "/authorize";
+    let r = await api("/api/v1/oauth/" + slug + "/authorize_url");
+    if (r.status !== 200) {
+      msg((r.body && r.body.detail) || "OAuth unavailable (" + r.status + ").", "err");
+      btn.disabled = false; btn.textContent = "Approve";
       return;
     }
-    const data = await res.json().catch(() => null);
-    msg((data && data.detail) || "OAuth failed (" + res.status + ").", "err");
-    btn.disabled = false; btn.textContent = "Approve";
+    window.location.href = r.body.url;
   } catch (e) {
     msg("Could not start OAuth: " + e.message, "err");
     btn.disabled = false; btn.textContent = "Approve";

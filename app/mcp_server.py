@@ -361,6 +361,7 @@ def build_mcp_asgi_app():
     ones before the app is built (see app.mcp_auth_ext).
     """
     from app.mcp_auth_ext import install_oauth_extensions
+    from app.middleware.provider_challenge import ProviderChallengeMiddleware
 
     install_oauth_extensions()
 
@@ -373,4 +374,4 @@ def build_mcp_asgi_app():
             allowed_origins=["http://localhost:*", "http://127.0.0.1:*", "http://[::1]:*"],
         ),
     )
-    return app
+    return ProviderChallengeMiddleware(app)

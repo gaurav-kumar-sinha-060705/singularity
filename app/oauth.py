@@ -152,7 +152,16 @@ _PROVIDERS: dict[str, OAuthProviderConfig] = {
         slug="slack", name="Slack",
         authorize_url="https://slack.com/oauth/v2/authorize",
         token_url="https://slack.com/api/oauth.v2.access",
-        scopes=["files:read", "channels:history"],
+        scopes=[
+            "team:read",
+            "channels:read",
+            "groups:read",
+            "channels:history",
+            "groups:history",
+            "chat:write",
+            "users:read",
+            "search:read",
+        ],
     ),
     "google": OAuthProviderConfig(
         slug="google", name="Google",
