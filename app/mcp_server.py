@@ -327,8 +327,9 @@ def call_tool(
         url = out.get("authorization_url") or ""
         return (
             f"'{provider_slug}' needs your authorization before it can run.\n"
-            f"Open {url} in a browser, sign in, and click Approve. Then ask the "
-            f"user to retry this call and it will work."
+            f"Authorization link: {url}\n"
+            f"Open that link in a browser, sign in if asked, and click Approve. "
+            f"Then ask the user to retry this call and it will work."
         )
     if out["decision"] == "failed":
         return f"Execution of '{provider_slug}' failed: {out['reason']}."
@@ -375,14 +376,15 @@ def build_mcp_asgi_app():
     the verified user via its auth context — which call_tool() reads.
 
     The SDK's stock auth handlers are replaced with private_key_jwt-capable
-    ones before the app is built (see app.mcp_auth_ext).
+    ones before the app is built (see app.mcp_auth_ext). Unauthenticated tools
+    are NOT popped into a browser (no RFC 9757 challenge): call_tool returns the
+    /authorize/{slug} link as plain text for the agent to hand to the user.
     """
     from app.mcp_auth_ext import install_oauth_extensions
-    from app.middleware.provider_challenge import ProviderChallengeMiddleware
 
     install_oauth_extensions()
 
-    app = mcp.streamable_http_app(
+    return mcp.streamable_http_app(
         stateless_http=True,
         json_response=True,
         transport_security=TransportSecuritySettings(
@@ -391,4 +393,3 @@ def build_mcp_asgi_app():
             allowed_origins=["http://localhost:*", "http://127.0.0.1:*", "http://[::1]:*"],
         ),
     )
-    return ProviderChallengeMiddleware(app)

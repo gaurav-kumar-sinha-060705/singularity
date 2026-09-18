@@ -312,6 +312,32 @@ def test_start_and_callback_mcp_oauth_end_to_end(client, monkeypatch):
         db.close()
 
 
+def test_start_redirect_vs_json_contract(client, monkeypatch):
+    """The frontend popup calls /start as a fetch and MUST get JSON, never a 302
+    redirect: browsers follow the redirect cross-origin to the provider's AS and
+    reject it with CORS 'Failed to fetch'. Plain browser navigation may still get
+    a 302."""
+    token, _ = _signup(client, "js")
+    monkeypatch.setattr(moa, "_http_get", lambda url, headers=None, timeout=10: _META)
+    monkeypatch.setattr(moa, "_http_post",
+                        lambda url, payload, headers=None, timeout=10: {"client_id": "sg-js", "client_secret": None})
+    auth = _auth(token)
+
+    no_header = client.get("/api/v1/auth/stripe-mcp/start", headers=auth, follow_redirects=False)
+    assert no_header.status_code == 302
+    assert no_header.headers["location"].startswith(_META["authorization_endpoint"])
+
+    xhr = client.get("/api/v1/auth/stripe-mcp/start",
+                     headers={**auth, "X-Requested-With": "XMLHttpRequest"})
+    assert xhr.status_code == 200
+    assert xhr.json()["method"] == "mcp_oauth"
+    assert xhr.json()["url"].startswith(_META["authorization_endpoint"])
+
+    q = client.get("/api/v1/auth/stripe-mcp/start?url=1", headers=auth)
+    assert q.status_code == 200
+    assert q.json()["method"] == "mcp_oauth"
+
+
 def test_generic_routes_registered_on_api_prefix():
     paths = [r.path for r in connect_router.router.routes]
     assert "/auth/catalog" in paths

@@ -1,11 +1,11 @@
-"""Provider popup approval: MCP challenge, consent popup, and authorize_url.
+"""Provider authorization via link (no auto-popup).
 
-Covers the two halves of the click-to-approve flow:
+Covers the connect flow:
 
-  1. tools/call on an unconnected provider -> 401 + MCP-Authorization-Request
-     (the header a real client uses to pop the browser window), and
-     pass-through once a credential exists.
-  2. The /mcp-auth consent popup (resource=<provider>) storing the credential
+  1. tools/call on an unconnected provider -> a 200 response whose text carries
+     the /authorize/{slug} link (no RFC 9757 popup challenge), and pass-through
+     once a credential exists.
+  2. The /mcp-auth consent flow (resource=<provider>) storing the credential
      and completing the MCP code flow; plus the REST authorize_url JSON.
 """
 
@@ -65,9 +65,9 @@ def _store_connection(user_id, provider_slug, token="github_pat_test"):
         db.close()
 
 
-def test_mcp_provider_challenge_without_credential(client):
-    """Calling an unconnected requires_auth provider returns 401 with the popup
-    challenge header (so compliant clients pop the approve window)."""
+def test_mcp_call_returns_authorize_link_without_credential(client):
+    """Calling an unconnected requires_auth provider returns the authorization
+    LINK in the tool text (agents present it to the user) — no browser popup."""
     token, _ = issue_oauth_access_token(client)
     auth_headers = {**HEADERS, "Authorization": f"Bearer {token}"}
     client.post("/mcp", json=_rpc("initialize", INIT), headers=auth_headers)
@@ -79,15 +79,15 @@ def test_mcp_provider_challenge_without_credential(client):
                   id_=2),
         headers=auth_headers,
     )
-    assert resp.status_code == 401, resp.text
-    www = resp.headers.get("www-authenticate", "")
-    assert "MCP-Authorization-Request" in www
-    assert "github-mcp" in www
-    assert "/authorize/github-mcp" in resp.text
+    assert resp.status_code == 200, resp.text
+    assert "MCP-Authorization-Request" not in resp.headers.get("www-authenticate", "")
+    text = "".join(c.get("text", "") for c in resp.json()["result"]["content"])
+    assert "/authorize/github-mcp" in text
+    assert "Authorization link:" in text
 
 
-def test_mcp_provider_challenge_passes_when_credential(client, monkeypatch):
-    """Once a credential exists for the calling user, the call runs (no popup)."""
+def test_mcp_call_runs_when_credential_present(client, monkeypatch):
+    """Once a credential exists for the calling user, the call runs (no authorization needed)."""
     import app.providers.github as gh
     from app.services.gateway import execute_via_gateway
 
@@ -117,8 +117,8 @@ def test_mcp_provider_challenge_passes_when_credential(client, monkeypatch):
     assert "octo/repo" in text
 
 
-def test_mcp_provider_challenge_ignores_keyless_provider(client):
-    """Keyless providers are not challenged — they always run."""
+def test_mcp_call_ignores_keyless_provider(client):
+    """Keyless providers always run — no authorization link in the reply."""
     token, _ = issue_oauth_access_token(client)
     auth_headers = {**HEADERS, "Authorization": f"Bearer {token}"}
     client.post("/mcp", json=_rpc("initialize", INIT), headers=auth_headers)

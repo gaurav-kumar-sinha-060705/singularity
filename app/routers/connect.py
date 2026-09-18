@@ -57,6 +57,10 @@ def _cap_or_404(slug: str):
     return cap
 
 
+def _wants_json(request: Request) -> bool:
+    return request.headers.get("X-Requested-With") == "XMLHttpRequest" or "url" in request.query_params
+
+
 def _optional_user(request: Request, db: Session = Depends(get_db)) -> User | None:
     auth_header = request.headers.get("Authorization", "")
     if auth_header.lower().startswith("bearer "):
@@ -126,7 +130,7 @@ def auth_start(
                 f"OAuth discovery failed for {cap.name}: {exc}",
             ) from exc
         url = mcp_oauth_svc.authorize_url(cap, client_id, verifier, state)
-        if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "url" in request.query_params:
+        if _wants_json(request):
             return {"method": "mcp_oauth", "name": cap.name, "url": url}
         return RedirectResponse(url=url, status_code=302)
 
@@ -145,7 +149,7 @@ def auth_start(
         state = build_state(user.id, slug, verifier, settings.jwt_secret)
         redirect_uri = f"{settings.oauth_public_base}/api/v1/auth/{slug}/callback"
         url = p.authorize_query(redirect_uri, state, verifier)
-        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        if _wants_json(request):
             return {"method": "provider_oauth", "name": p.name, "url": url}
         return RedirectResponse(url=url, status_code=302)
 

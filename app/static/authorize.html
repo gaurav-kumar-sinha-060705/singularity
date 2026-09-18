@@ -24,6 +24,9 @@ input:focus { outline: none; border-color: #0b58fe; }
 .msg.err { display: block; background: #dc262622; border: 1px solid #dc262655; color: #ff9b9b; }
 .msg.ok { display: block; background: #16a34a22; border: 1px solid #16a34a55; color: #9fe0b8; }
 .hint { font-size: .78rem; opacity: .7; margin-top: 14px; }
+.direct { font-size: .88rem; color: #c9cdd6; margin: 12px 0 2px; }
+.direct a { color: #0b58fe; text-decoration: none; overflow-wrap: anywhere; }
+.direct a:hover { text-decoration: underline; }
 .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid #8888; border-top-color: #0b58fe; border-radius: 50%; animation: sp 0.8s linear infinite; vertical-align: -2px; margin-right: 6px; }
 @keyframes sp { to { transform: rotate(360deg); } }
 .small { font-size: .82rem; opacity: .75; }
@@ -38,6 +41,9 @@ input:focus { outline: none; border-color: #0b58fe; }
 
   <div id="ready">
     <p class="small" id="mode">Checking…</p>
+    <p id="direct" class="direct" style="display:none">Or open the link:
+      <a id="directLink" href="#" target="_blank" rel="noopener"></a>
+    </p>
     <button class="button" id="approveBtn" disabled>Approve</button>
 
     <div id="fallback" style="display:none">
@@ -114,18 +120,12 @@ async function showSlot() {
   const name = cap ? cap.name : SLUG;
   const methods = cap ? cap.methods : ["api_key"];
   document.getElementById("approveBtn").disabled = false;
-  if (methods.indexOf("mcp_oauth") > -1) {
+  if (methods.indexOf("mcp_oauth") > -1 || methods.indexOf("provider_oauth") > -1) {
     document.getElementById("mode").textContent =
       "One-click connect with " + name + " (you'll approve on " + name + "'s page).";
     document.getElementById("approveBtn").textContent = "Approve & connect " + name;
     document.getElementById("approveBtn").onclick = () => startOAuth(SLUG);
-    return;
-  }
-  if (methods.indexOf("provider_oauth") > -1) {
-    document.getElementById("mode").textContent =
-      "One-click connect with " + name + " (you'll approve on their page).";
-    document.getElementById("approveBtn").textContent = "Approve & connect " + name;
-    document.getElementById("approveBtn").onclick = () => startOAuth(SLUG);
+    fetchStartLink(SLUG);
     return;
   }
   document.getElementById("mode").textContent =
@@ -140,7 +140,9 @@ async function startOAuth(slug) {
   const btn = document.getElementById("approveBtn");
   btn.disabled = true; btn.textContent = "Opening " + slug + "…";
   try {
-    let r = await api("/api/v1/auth/" + encodeURIComponent(slug) + "/start");
+    let r = await api("/api/v1/auth/" + encodeURIComponent(slug) + "/start", {
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+    });
     if (r.status !== 200) {
       msg((r.body && r.body.detail) || "Connect unavailable (" + r.status + ").", "err");
       btn.disabled = false; btn.textContent = "Approve";
@@ -159,6 +161,23 @@ async function startOAuth(slug) {
   } catch (e) {
     msg("Could not start connect: " + e.message, "err");
     btn.disabled = false; btn.textContent = "Approve";
+  }
+}
+
+async function fetchStartLink(slug) {
+  const link = document.getElementById("directLink");
+  const row = document.getElementById("direct");
+  try {
+    let r = await api("/api/v1/auth/" + encodeURIComponent(slug) + "/start", {
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+    });
+    if (r.status !== 200 || (r.body.method !== "mcp_oauth" && r.body.method !== "provider_oauth")) return;
+    link.href = r.body.url;
+    link.textContent = r.body.url;
+    row.style.display = "block";
+    document.getElementById("approveBtn").onclick = () => { window.location.href = r.body.url; };
+  } catch (e) {
+    /* keep the retry-on-click path; the direct link is a convenience */
   }
 }
 
