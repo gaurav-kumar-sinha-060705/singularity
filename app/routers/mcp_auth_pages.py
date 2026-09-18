@@ -130,9 +130,13 @@ def _escape(value) -> str:
 
 def _provider_hint(slug: str) -> str:
     from app.providers import registry
+    from app.services.oauth_caps import get_capability
 
+    cap = get_capability(slug)
+    if cap and cap.api_key_hint:
+        return cap.api_key_hint
     provider = registry.get_provider(slug)
-    if provider and hasattr(provider, "token_hint"):
+    if provider and hasattr(provider, "token_hint") and getattr(provider, "token_hint"):
         return provider.token_hint
     hints = {
         "github": "ghp_...",
@@ -141,16 +145,38 @@ def _provider_hint(slug: str) -> str:
         "stripe": "sk_...",
         "google": "OAuth token",
     }
-    return hints.get(slug.replace("-mcp", ""), "API key")
+    return hints.get(slug.replace("-mcp", "").replace("-stdio", ""), "API key")
 
 
 def _provider_display_name(slug: str) -> str:
-    cfg_name = get_provider(slug.replace("-mcp", ""))
+    from app.services.oauth_caps import get_capability
+
+    cap = get_capability(slug)
+    if cap and cap.name:
+        return cap.name
+    base = slug.replace("-mcp", "").replace("-stdio", "")
+    cfg_name = get_provider(base)
     if cfg_name:
         return cfg_name.name
     hints = {"github-mcp": "GitHub", "slack-mcp": "Slack",
              "notion-mcp": "Notion", "stripe-mcp": "Stripe"}
     return hints.get(slug, slug)
+
+
+def _cap_is_oauth_ready(slug: str) -> bool:
+    """True when this tool supports one-click (mcp_oauth always; provider_oauth
+    only once the app is configured)."""
+    from app.services.oauth_caps import get_capability
+
+    cap = get_capability(slug)
+    if not cap:
+        return False
+    if cap.prefer == "mcp_oauth":
+        return True
+    if cap.prefer == "provider_oauth" and cap.provider:
+        cfg = get_provider(cap.provider)
+        return bool(cfg and cfg.configured)
+    return False
 
 
 def _is_provider_resource(resource: str) -> bool:
@@ -229,8 +255,7 @@ def consent_page(
 
 def _provider_body(resource: str, client_name: str, hidden: str, state: str) -> str:
     provider_name = _provider_display_name(resource)
-    cfg = get_provider(resource.replace("-mcp", ""))
-    oauth_ready = bool(cfg and cfg.configured)
+    oauth_ready = _cap_is_oauth_ready(resource)
     if oauth_ready:
         connect_ui = _PROVIDER_APPROVE.format(hidden=hidden, provider_name=provider_name)
     else:
@@ -346,8 +371,7 @@ def _consent_provider_connect(
     hand off to the provider's OAuth (click-approve path), then continue the MCP
     authorization-code flow."""
     provider_name = _provider_display_name(resource)
-    cfg = get_provider(resource.replace("-mcp", ""))
-    oauth_ready = bool(cfg and cfg.configured)
+    oauth_ready = _cap_is_oauth_ready(resource)
 
     if not token.strip():
         if oauth_ready and user_id:
@@ -367,7 +391,7 @@ def _consent_provider_connect(
                 samesite="lax",
             )
             return RedirectResponse(
-                f"/api/v1/oauth/{resource.replace('-mcp', '')}/authorize", status_code=303
+                f"/api/v1/auth/{resource}/start", status_code=303
             )
         if user_id:
             raise HTTPException(400, "a credential is required to connect this tool")

@@ -47,6 +47,14 @@ class Tool(Base):
     source: Mapped[str] = mapped_column(String(30), default="curated")
     execution_tier: Mapped[str] = mapped_column(String(20), default="unknown")
     requires_credential: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Auth connect semantics for a keyed tool (single-sourced from
+    # data/oauth_capabilities.json via the seeder):
+    #   mcp_oauth       - one-click dynamic sign-in (no client id needed)
+    #   provider_oauth  - one-click via an OAuth app (client id + secret env)
+    #   api_key         - paste a token (no OAuth at all, e.g. Browserbase)
+    #   none            - anonymous / unauthenticated tool
+    auth_mode: Mapped[str] = mapped_column(String(20), default="none")
+    client_id_required: Mapped[bool] = mapped_column(Boolean, default=False)
     embedding_dim: Mapped[int | None] = mapped_column(Integer, nullable=True)
     embedding: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -87,6 +95,8 @@ class Tool(Base):
             "source": self.source,
             "execution_tier": self.execution_tier,
             "requires_credential": self.requires_credential,
+            "auth_mode": self.auth_mode,
+            "client_id_required": self.client_id_required,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }
@@ -153,6 +163,21 @@ class Connection(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     user = relationship("User")
+
+
+class RemoteOAuthClient(Base):
+    """Outbound dynamic-client registrations with hosted MCP OAuth servers
+    (RFC 7591). One row per tool slug; client_secret may be absent (PKCE-only
+    "none" servers). Tokens themselves stay in `connections` per user."""
+
+    __tablename__ = "remote_oauth_clients"
+
+    slug: Mapped[str] = mapped_column(String(120), primary_key=True)
+    client_id: Mapped[str] = mapped_column(String(512))
+    client_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    registration_json: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class OAuthClient(Base):

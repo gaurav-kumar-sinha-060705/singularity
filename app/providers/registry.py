@@ -72,6 +72,21 @@ def get_provider(slug: str) -> Provider | None:
     return _ALL.get(slug)
 
 
+def _auth_fields(slug: str) -> tuple[str, bool]:
+    """(auth_mode, client_id_required) for a tool, derived from the capability
+    catalog so the surfaced metadata can never drift from the connect engine."""
+    from app.services.oauth_caps import get_capability
+
+    cap = get_capability(slug)
+    if not cap:
+        return "none", False
+    if cap.prefer == "mcp_oauth":
+        return "mcp_oauth", False
+    if cap.prefer == "provider_oauth":
+        return "provider_oauth", True
+    return "api_key", False
+
+
 def list_public_tools() -> list[dict]:
     tools = [
         {
@@ -84,6 +99,8 @@ def list_public_tools() -> list[dict]:
             "tier": "tier1",
             "requires_credential": bool(getattr(p, "requires_auth", False)),
             "api_key_hint": getattr(p, "token_hint", ""),
+            "auth_mode": _auth_fields(p.slug)[0],
+            "client_id_required": _auth_fields(p.slug)[1],
         }
         for p in sorted(_PROVIDERS.values(), key=lambda p: p.slug)
     ]
@@ -101,6 +118,8 @@ def list_public_tools() -> list[dict]:
             "tier": getattr(p, "tier", "tier2"),
             "auth_kind": getattr(p, "auth_kind", "bearer"),
             "api_key_hint": getattr(p, "api_key_hint", ""),
+            "auth_mode": _auth_fields(p.slug)[0],
+            "client_id_required": _auth_fields(p.slug)[1],
         }
         for p in sorted(_REMOTE_PROVIDERS.values(), key=lambda p: p.slug)
     ]
@@ -117,6 +136,8 @@ def list_public_tools() -> list[dict]:
             "auth_required": p.requires_auth,
             "tier": "tier3",
             "api_key_hint": getattr(p, "api_key_hint", ""),
+            "auth_mode": _auth_fields(p.slug)[0],
+            "client_id_required": _auth_fields(p.slug)[1],
         }
         for p in sorted(_STDIO_PROVIDERS.values(), key=lambda p: p.slug)
     ]

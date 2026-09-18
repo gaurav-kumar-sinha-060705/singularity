@@ -27,7 +27,23 @@ _SEED_ADVISORY_LOCK_KEY = 0x53494E47
 
 COPY_FIELDS = ("name", "publisher", "publisher_verified", "category", "description",
                "mcp_available", "pricing_tier", "source")
-EVOLVING_FIELDS = ("execution_tier", "requires_credential")
+EVOLVING_FIELDS = ("execution_tier", "requires_credential", "auth_mode", "client_id_required")
+
+
+def _auth_fields(slug: str) -> tuple[str, bool]:
+    """Derive (auth_mode, client_id_required) from the connect capability catalog
+    so the DB never goes stale vs data/oauth_capabilities.json and no tool is
+    hardcoded in the seeder."""
+    from app.services.oauth_caps import get_capability
+
+    cap = get_capability(slug)
+    if not cap:
+        return "none", False
+    if cap.prefer == "mcp_oauth":
+        return "mcp_oauth", False
+    if cap.prefer == "provider_oauth":
+        return "provider_oauth", True
+    return "api_key", False
 
 
 def _tool_id(slug: str) -> str:
@@ -87,6 +103,7 @@ def _populate(db, tool, entry) -> list[str]:
     tool.permissions_requested_json = json.dumps(entry.get("permissions_requested", []))
     tool.permissions_needed_json = json.dumps(entry.get("permissions_needed", []))
     tool.trust_flags_json = json.dumps(flags)
+    tool.auth_mode, tool.client_id_required = _auth_fields(tool.slug)
     db.flush()
     return flags
 

@@ -1,14 +1,16 @@
-"""OAuth 2.0 (Authorization Code + PKCE) for connecting external providers.
+"""OAuth 2.0 (Authorization Code + PKCE) config for connecting external providers.
 
-Phase 4.3. Each provider is configured via env vars:
+Fully data-driven: provider OAuth *app* configs live in `data/provider_oauth.json`
+(keyed by a short slug like "github", "google"). Each row is activated at runtime
+by env vars:
 
     SINGULARITY_<SLUG>_CLIENT_ID / SINGULARITY_<SLUG>_CLIENT_SECRET
 
-OAuth is complementary to the manual API-key path (POST /connections): for
-providers that *only* support OAuth (Slack, Google Drive), users connect via a
-redirect flow; the gateway stores the resulting tokens in the encrypted vault
-and injects them as Bearer headers on execution. pkce_state() / resolve_state()
-let an anonymous browser round-trip carry (user_id, code_verifier) safely.
+OAuth here is one of the connect strategies for keyed tools (see
+app.services.oauth_caps / data/oauth_capabilities.json). The gateway stores the
+resulting tokens in the encrypted vault and injects them via the credential
+adapter at execution. pkce_state() / resolve_state() let an anonymous browser
+round-trip carry (user_id, code_verifier) safely.
 """
 
 from __future__ import annotations
@@ -21,10 +23,15 @@ import os
 import secrets
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 from urllib.parse import urlencode
 
+import httpx
+
 OAUTH_STATE_TTL_SECONDS = 600
+
+_OAUTH_JSON = Path(__file__).resolve().parent.parent / "data" / "provider_oauth.json"
 
 
 def b64url(data: bytes) -> str:
@@ -115,6 +122,25 @@ class OAuthProviderConfig:
         return f"{self.authorize_url}?{urlencode(params)}"
 
 
+def _load_providers() -> dict[str, OAuthProviderConfig]:
+    raw = json.loads(_OAUTH_JSON.read_text(encoding="utf-8"))
+    result: dict[str, OAuthProviderConfig] = {}
+    for slug, entry in raw.items():
+        result[slug] = OAuthProviderConfig(
+            slug=slug,
+            name=entry.get("name", slug),
+            authorize_url=entry["authorize_url"],
+            token_url=entry["token_url"],
+            scopes=list(entry.get("scopes", [])),
+            client_auth=entry.get("client_auth", "body"),
+            token_accept=entry.get("token_accept"),
+        )
+    return result
+
+
+_PROVIDERS: dict[str, OAuthProviderConfig] = _load_providers()
+
+
 def providers() -> list[str]:
     return sorted(_PROVIDERS.keys())
 
@@ -127,50 +153,39 @@ def new_code_verifier() -> str:
     return b64url(secrets.token_bytes(48))
 
 
-_PROVIDERS: dict[str, OAuthProviderConfig] = {
-    "stripe": OAuthProviderConfig(
-        slug="stripe", name="Stripe",
-        authorize_url="https://connect.stripe.com/oauth/authorize",
-        token_url="https://connect.stripe.com/oauth/token",
-        scopes=["read_only"],
-    ),
-    "notion": OAuthProviderConfig(
-        slug="notion", name="Notion",
-        authorize_url="https://api.notion.com/v1/oauth/authorize",
-        token_url="https://api.notion.com/v1/oauth/token",
-        client_auth="basic",
-        token_accept="application/json",
-    ),
-    "github": OAuthProviderConfig(
-        slug="github", name="GitHub",
-        authorize_url="https://github.com/login/oauth/authorize",
-        token_url="https://github.com/login/oauth/access_token",
-        scopes=["repo", "read:user"],
-        token_accept="application/json",
-    ),
-    "slack": OAuthProviderConfig(
-        slug="slack", name="Slack",
-        authorize_url="https://slack.com/oauth/v2/authorize",
-        token_url="https://slack.com/api/oauth.v2.access",
-        scopes=[
-            "team:read",
-            "channels:read",
-            "groups:read",
-            "channels:history",
-            "groups:history",
-            "chat:write",
-            "users:read",
-            "search:read",
-        ],
-    ),
-    "google": OAuthProviderConfig(
-        slug="google", name="Google",
-        authorize_url="https://accounts.google.com/o/oauth2/v2/auth",
-        token_url="https://oauth2.googleapis.com/token",
-        scopes=[
-            "https://www.googleapis.com/auth/drive.readonly",
-            "https://www.googleapis.com/auth/documents.readonly",
-        ],
-        client_auth="basic",
-    ),
-}
+class ProviderRefreshError(Exception):
+    pass
+
+
+def provider_refresh(p: OAuthProviderConfig, credential: dict) -> dict:
+    """Silent refresh for provider-OAuth credentials that carry a refresh_token
+    (e.g. Google). Returns the merged credential with fresh access_token."""
+    if not credential.get("refresh_token"):
+        return credential
+    if not p.configured:
+        raise ProviderRefreshError(f"{p.name} OAuth is not configured for refresh")
+    payload = {
+        "grant_type": "refresh_token",
+        "refresh_token": credential["refresh_token"],
+        "client_id": p.client_id,
+        "client_secret": p.client_secret,
+    }
+    with httpx.Client(timeout=15.0) as client:
+        resp = client.post(
+            p.token_url,
+            data=payload,
+            headers={"Accept": p.token_accept or "application/json"},
+        )
+    try:
+        resp.raise_for_status()
+    except Exception as exc:
+        raise ProviderRefreshError(f"refresh failed: {exc}") from exc
+    data = resp.json()
+    if "access_token" not in data:
+        raise ProviderRefreshError("no access_token in refresh response")
+    updated = dict(credential)
+    updated["access_token"] = data["access_token"]
+    if data.get("refresh_token"):
+        updated["refresh_token"] = data["refresh_token"]
+    updated["expires_at"] = int(time.time()) + int(data.get("expires_in", 3600))
+    return updated

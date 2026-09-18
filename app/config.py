@@ -40,8 +40,15 @@ class Settings(BaseSettings):
     remote_mcp_timeout: float = 15.0
     remote_list_tools_ttl: float = 300.0
     remote_mcp_allowed_hosts: str = (
-        "mcp.stripe.com,mcp.notion.com,mcp.browserbase.com"
+        "mcp.stripe.com,mcp.notion.com,mcp.browserbase.com,mcp.firecrawl.dev"
     )
+
+    # One-click MCP OAuth (RFC 9728): discovery + dynamic client registration.
+    mcp_oauth_discovery_ttl: float = 3600.0
+
+    # Silent token-refresh engine: refresh when expires_at is within this many
+    # seconds of now (seconds). 0 disables proactive refresh.
+    token_refresh_skew: int = 120
 
     # Auth + credential vault
     jwt_secret: str = "singularity-dev-jwt-secret-change-me"

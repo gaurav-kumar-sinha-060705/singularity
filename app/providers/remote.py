@@ -112,6 +112,7 @@ class RemoteMcpProvider(Provider):
         - bearer auth -> Authorization header, URL unchanged
         - query auth -> the key appended to the URL as `auth_param`
           (Browserbase), no header
+        - header auth -> the token in a named header (`auth_param`)
         Supports an explicit {"headers": {...}} credential form, or a token from
         access_token/api_key/token.
         """
@@ -127,6 +128,9 @@ class RemoteMcpProvider(Provider):
                 sep = "&" if "?" in remote_url else "?"
                 url = f"{remote_url}{sep}{urlencode({auth_param: str(token)})}"
                 return headers, url
+            if auth_kind == "header" and auth_param:
+                headers.setdefault(auth_param, str(token))
+                return headers, remote_url
             headers.setdefault("Authorization", f"Bearer {token}")
         return headers, remote_url
 

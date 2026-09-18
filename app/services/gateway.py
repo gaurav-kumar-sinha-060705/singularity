@@ -43,9 +43,18 @@ def _resolve_credential(db: Session, user_id: str | None, provider_slug: str) ->
     if not conn:
         return None
     try:
-        return json.loads(decrypt(conn.credential_json))
+        credential = json.loads(decrypt(conn.credential_json))
     except Exception:
         return None
+    if credential.get("refresh_token") or credential.get("expires_at"):
+        from app.services.mcp_oauth import refresh_for_slug
+
+        refreshed = refresh_for_slug(provider_slug, credential, db)
+        if refreshed is not credential and refreshed.get("access_token") != credential.get("access_token"):
+            conn.credential_json = encrypt(json.dumps(refreshed))
+            db.commit()
+        return refreshed
+    return credential
 
 
 def execute_via_gateway(provider_slug: str, arguments: dict, scope: str | None = None,

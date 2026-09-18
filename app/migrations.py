@@ -43,8 +43,10 @@ def run(db: Session) -> None:
     from app.database import Base
     from app import models  # noqa: F401  ensure models registered
 
-    for table in ("oauth_clients", "oauth_auth_codes", "oauth_tokens"):
+    for table in ("oauth_clients", "oauth_auth_codes", "oauth_tokens", "remote_oauth_clients"):
         if table not in already:
+            if not getattr(engine, "_run_ddl_visitor", None):
+                continue  # inert stub engines in tests: skip DDL (no dialect driver)
             Base.metadata.tables[table].create(bind=engine)
             db.commit()
             print(f"[singularity] migration: created table {table}")
@@ -61,6 +63,8 @@ def run(db: Session) -> None:
         migrations = [
             ("tools", "requires_credential", "BOOLEAN NOT NULL DEFAULT false" if dialect == "postgresql" else "BOOLEAN NOT NULL DEFAULT 0"),
             ("tools", "execution_tier", "VARCHAR(20) NOT NULL DEFAULT 'unknown'"),
+            ("tools", "auth_mode", "VARCHAR(20) NOT NULL DEFAULT 'none'"),
+            ("tools", "client_id_required", "BOOLEAN NOT NULL DEFAULT false" if dialect == "postgresql" else "BOOLEAN NOT NULL DEFAULT 0"),
         ]
 
         for table, col, dtype in migrations:

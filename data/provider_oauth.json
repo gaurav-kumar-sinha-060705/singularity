@@ -1,0 +1,54 @@
+{
+  "stripe": {
+    "name": "Stripe",
+    "authorize_url": "https://connect.stripe.com/oauth/authorize",
+    "token_url": "https://connect.stripe.com/oauth/token",
+    "scopes": ["read_only"],
+    "client_auth": "body",
+    "token_accept": null
+  },
+  "notion": {
+    "name": "Notion",
+    "authorize_url": "https://api.notion.com/v1/oauth/authorize",
+    "token_url": "https://api.notion.com/v1/oauth/token",
+    "scopes": [],
+    "client_auth": "basic",
+    "token_accept": "application/json"
+  },
+  "github": {
+    "name": "GitHub",
+    "authorize_url": "https://github.com/login/oauth/authorize",
+    "token_url": "https://github.com/login/oauth/access_token",
+    "scopes": ["repo", "read:user"],
+    "client_auth": "body",
+    "token_accept": "application/json"
+  },
+  "slack": {
+    "name": "Slack",
+    "authorize_url": "https://slack.com/oauth/v2/authorize",
+    "token_url": "https://slack.com/api/oauth.v2.access",
+    "scopes": [
+      "team:read",
+      "channels:read",
+      "groups:read",
+      "channels:history",
+      "groups:history",
+      "chat:write",
+      "users:read",
+      "search:read"
+    ],
+    "client_auth": "body",
+    "token_accept": null
+  },
+  "google": {
+    "name": "Google",
+    "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
+    "token_url": "https://oauth2.googleapis.com/token",
+    "scopes": [
+      "https://www.googleapis.com/auth/drive.readonly",
+      "https://www.googleapis.com/auth/documents.readonly"
+    ],
+    "client_auth": "basic",
+    "token_accept": null
+  }
+}

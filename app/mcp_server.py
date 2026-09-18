@@ -259,12 +259,20 @@ def list_public_tools() -> str:
         "tier2": "tier2 · streamable-http (official)",
         "tier3": "tier3 · stdio (container)",
     }
+    auth_labels = {
+        "mcp_oauth": "one-click sign-in (no client id needed)",
+        "provider_oauth": "one-click OAuth (needs client id/secret env)",
+        "api_key": "paste an API key",
+        "none": "keyless",
+    }
     lines = []
     for t in tools:
         label = tier_labels.get(t.get("tier", ""), t.get("tier", ""))
+        auth_mode = t.get("auth_mode", "none")
+        auth_label = auth_labels.get(auth_mode, auth_mode)
         if t.get("requires_credential") or t.get("auth_required"):
             hint = t.get("api_key_hint") or "API key"
-            cred = f" — needs credential ({hint})"
+            cred = f" — connect: {auth_label} ({hint})"
         else:
             cred = " — keyless"
         lines.append(

@@ -21,6 +21,17 @@
     "api_key_hint": "secret_...",
     "tier": "tier2"
   },
+  "firecrawl-mcp": {
+    "slug": "firecrawl-mcp",
+    "remote_url": "https://mcp.firecrawl.dev/v2/mcp",
+    "host": "mcp.firecrawl.dev",
+    "server_name": "Firecrawl MCP (official)",
+    "server_description": "Firecrawl's official hosted MCP server: web search, scrape, and parse. One-click connect via Firecrawl OAuth, or paste an fc-... API key.",
+    "auth_required": true,
+    "auth_kind": "bearer",
+    "api_key_hint": "fc-...",
+    "tier": "tier2"
+  },
   "browserbase-mcp": {
     "slug": "browserbase-mcp",
     "remote_url": "https://mcp.browserbase.com/mcp",

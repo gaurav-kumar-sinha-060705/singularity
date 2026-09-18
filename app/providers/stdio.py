@@ -51,9 +51,12 @@ ALLOWLISTED_STDIO: list[dict] = [
         "command": "npx",
         "args": ["-y", "@googledrive-mcp/gdrive"],
         "binfmt": "local",
-        "env": {"access_token": "GOOGLE_DRIVE_ACCESS_TOKEN"},
+        "env": {
+            "access_token": "GOOGLE_DRIVE_ACCESS_TOKEN",
+            "refresh_token": "GOOGLE_DRIVE_REFRESH_TOKEN",
+        },
         "credential_env": "GOOGLE_DRIVE_ACCESS_TOKEN",
-        "api_key_hint": "Drive OAuth token",
+        "api_key_hint": "Drive OAuth access token",
         "auth_required": True,
     },
 ]

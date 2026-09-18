@@ -1,0 +1,101 @@
+{
+  "stripe-mcp": {
+    "prefer": "mcp_oauth",
+    "name": "Stripe",
+    "resource": "https://access.stripe.com/mcp",
+    "as_metadata_url": "https://access.stripe.com/mcp/.well-known/oauth-authorization-server",
+    "server_url": "https://mcp.stripe.com",
+    "fallback_method": "api_key",
+    "api_key_hint": "sk_..."
+  },
+  "notion-mcp": {
+    "prefer": "mcp_oauth",
+    "name": "Notion",
+    "resource": "https://mcp.notion.com",
+    "as_metadata_url": "https://mcp.notion.com/.well-known/oauth-authorization-server",
+    "server_url": "https://mcp.notion.com",
+    "fallback_method": "api_key",
+    "api_key_hint": "secret_..."
+  },
+  "firecrawl-mcp": {
+    "prefer": "mcp_oauth",
+    "name": "Firecrawl",
+    "resource": "https://api.firecrawl.dev",
+    "as_metadata_url": "https://www.firecrawl.dev/.well-known/oauth-authorization-server",
+    "oauth_server_url": "https://mcp.firecrawl.dev/v2/mcp-oauth",
+    "server_url": "https://mcp.firecrawl.dev/v2/mcp",
+    "fallback_method": "api_key",
+    "api_key_hint": "fc-..."
+  },
+  "browserbase-mcp": {
+    "prefer": "api_key",
+    "name": "Browserbase",
+    "server_url": "https://mcp.browserbase.com/mcp",
+    "api_key_hint": "BROWSERBASE_API_KEY",
+    "auth_kind": "query",
+    "auth_param": "browserbaseApiKey"
+  },
+  "github-mcp": {
+    "prefer": "provider_oauth",
+    "name": "GitHub",
+    "provider": "github"
+  },
+  "slack-mcp": {
+    "prefer": "provider_oauth",
+    "name": "Slack",
+    "provider": "slack"
+  },
+  "github-stdio": {
+    "prefer": "provider_oauth",
+    "name": "GitHub",
+    "provider": "github",
+    "env_map": {
+      "access_token": "GITHUB_PERSONAL_ACCESS_TOKEN",
+      "api_key": "GITHUB_PERSONAL_ACCESS_TOKEN"
+    }
+  },
+  "google-drive-stdio": {
+    "prefer": "provider_oauth",
+    "name": "Google",
+    "provider": "google",
+    "env_map": {
+      "access_token": "GOOGLE_DRIVE_ACCESS_TOKEN",
+      "refresh_token": "GOOGLE_DRIVE_REFRESH_TOKEN"
+    }
+  },
+  "sentry-mcp": {
+    "prefer": "api_key",
+    "name": "Sentry",
+    "api_key_hint": "Sentry auth token (sntryu_...)"
+  },
+  "jira-mcp": {
+    "prefer": "api_key",
+    "name": "Jira",
+    "api_key_hint": "Atlassian email + API token"
+  },
+  "linear-mcp": {
+    "prefer": "api_key",
+    "name": "Linear",
+    "api_key_hint": "Linear API key"
+  },
+  "supabase-mcp": {
+    "prefer": "api_key",
+    "name": "Supabase",
+    "api_key_hint": "Supabase access token"
+  },
+  "zapier-mcp": {
+    "prefer": "api_key",
+    "name": "Zapier",
+    "api_key_hint": "Zapier API key"
+  },
+  "expensify-mcp": {
+    "prefer": "api_key",
+    "name": "Expensify",
+    "api_key_hint": "Expensify partner token"
+  },
+  "postgres-mcp": {
+    "prefer": "api_key",
+    "name": "PostgreSQL",
+    "api_key_hint": "PostgreSQL connection string"
+  }
+}

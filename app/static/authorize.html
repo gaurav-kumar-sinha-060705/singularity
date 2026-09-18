@@ -41,7 +41,7 @@ input:focus { outline: none; border-color: #0b58fe; }
     <button class="button" id="approveBtn" disabled>Approve</button>
 
     <div id="fallback" style="display:none">
-      <input id="token" type="password" autocomplete="off" placeholder="Paste a token (ghp_… / sk_… / secret_… / xoxb-…)">
+      <input id="token" type="password" autocomplete="off" placeholder="Paste a token/API key">
       <button class="button" id="fallbackBtn">Connect (store token)</button>
     </div>
 
@@ -97,12 +97,11 @@ async function showSigninOrDashboard(resp) {
 }
 
 async function showSlot() {
-  const [provsR, connsR] = await Promise.all([
-    api("/api/v1/oauth/providers"),
+  const [catalogR, connsR] = await Promise.all([
+    api("/api/v1/auth/catalog?slug=" + encodeURIComponent(SLUG)),
     api("/api/v1/connections"),
   ]);
-  const oauthSlug = SLUG.replace(/-mcp$/, "");
-  const prov = (provsR.body || []).find(p => p.slug === oauthSlug);
+  const cap = (catalogR.body && catalogR.body.items && catalogR.body.items[0]) || null;
   const conns = (connsR.body || []);
   const connected = conns.some(c => c.provider_slug === SLUG);
 
@@ -112,35 +111,53 @@ async function showSlot() {
     return;
   }
 
+  const name = cap ? cap.name : SLUG;
+  const methods = cap ? cap.methods : ["api_key"];
   document.getElementById("approveBtn").disabled = false;
-  const configured = !!prov && prov.configured === true;
-  if (configured) {
+  if (methods.indexOf("mcp_oauth") > -1) {
     document.getElementById("mode").textContent =
-      "One-click connect with " + prov.name + " (you'll approve on their page).";
-    document.getElementById("approveBtn").textContent = "Approve & connect " + (prov.name || "");
-    document.getElementById("approveBtn").onclick = () => startOAuth(oauthSlug);
-  } else {
-    document.getElementById("mode").textContent =
-      "OAuth isn't configured, so connect the once using a token:";
-    document.getElementById("fallback").style.display = "block";
-    document.getElementById("approveBtn").style.display = "none";
-    document.getElementById("fallbackBtn").onclick = saveKey;
+      "One-click connect with " + name + " (you'll approve on " + name + "'s page).";
+    document.getElementById("approveBtn").textContent = "Approve & connect " + name;
+    document.getElementById("approveBtn").onclick = () => startOAuth(SLUG);
+    return;
   }
+  if (methods.indexOf("provider_oauth") > -1) {
+    document.getElementById("mode").textContent =
+      "One-click connect with " + name + " (you'll approve on their page).";
+    document.getElementById("approveBtn").textContent = "Approve & connect " + name;
+    document.getElementById("approveBtn").onclick = () => startOAuth(SLUG);
+    return;
+  }
+  document.getElementById("mode").textContent =
+    "Paste a credential for " + name + ":";
+  document.getElementById("token").placeholder = cap && cap.api_key_hint ? cap.api_key_hint : "Paste a token/API key";
+  document.getElementById("fallback").style.display = "block";
+  document.getElementById("approveBtn").style.display = "none";
+  document.getElementById("fallbackBtn").onclick = saveKey;
 }
 
 async function startOAuth(slug) {
   const btn = document.getElementById("approveBtn");
   btn.disabled = true; btn.textContent = "Opening " + slug + "…";
   try {
-    let r = await api("/api/v1/oauth/" + slug + "/authorize_url");
+    let r = await api("/api/v1/auth/" + encodeURIComponent(slug) + "/start");
     if (r.status !== 200) {
-      msg((r.body && r.body.detail) || "OAuth unavailable (" + r.status + ").", "err");
+      msg((r.body && r.body.detail) || "Connect unavailable (" + r.status + ").", "err");
       btn.disabled = false; btn.textContent = "Approve";
+      return;
+    }
+    if (r.body.method === "api_key") {
+      document.getElementById("mode").textContent = "Connect using a token:";
+      if (r.body.api_key_hint) document.getElementById("token").placeholder = r.body.api_key_hint;
+      document.getElementById("fallback").style.display = "block";
+      document.getElementById("approveBtn").style.display = "none";
+      document.getElementById("fallbackBtn").onclick = saveKey;
+      btn.disabled = false;
       return;
     }
     window.location.href = r.body.url;
   } catch (e) {
-    msg("Could not start OAuth: " + e.message, "err");
+    msg("Could not start connect: " + e.message, "err");
     btn.disabled = false; btn.textContent = "Approve";
   }
 }
